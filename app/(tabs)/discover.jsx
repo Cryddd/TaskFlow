@@ -1,47 +1,13 @@
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { DISCOVER_CATEGORIES } from '../../lib/constants/templates';
 import { colors, fonts, spacing, radius, shadows } from '../../lib/theme';
 
-const CATEGORIES = [
-  {
-    id: 'work',
-    name: 'Work & Productivity',
-    count: '240 templates',
-    icon: 'work',
-    gradient: ['#334155', '#0F172A'],
-  },
-  {
-    id: 'fitness',
-    name: 'Fitness & Health',
-    count: '180 templates',
-    icon: 'fitness-center',
-    gradient: ['#0D9488', '#065F46'],
-  },
-  {
-    id: 'mindfulness',
-    name: 'Mindfulness',
-    count: '120 templates',
-    icon: 'self-improvement',
-    gradient: ['#6C63D1', '#26215C'],
-  },
-  {
-    id: 'nutrition',
-    name: 'Nutrition',
-    count: '95 templates',
-    icon: 'restaurant',
-    gradient: ['#16A34A', '#14532D'],
-  },
-];
-
-const COMMUNITY = [
-  { id: 'u1', name: 'Alex Chen',    initials: 'AC', tasks: 142, habits: 8, color: '#6C63D1' },
-  { id: 'u2', name: 'Maria G.',     initials: 'MG', tasks: 98,  habits: 5, color: '#14B8A6' },
-  { id: 'u3', name: 'James Park',   initials: 'JP', tasks: 217, habits: 12, color: '#F59E0B' },
-  { id: 'u4', name: 'Sara L.',      initials: 'SL', tasks: 76,  habits: 6, color: '#22C55E' },
-];
-
 export default function DiscoverScreen() {
+  const router = useRouter();
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.topBar}>
@@ -73,8 +39,13 @@ export default function DiscoverScreen() {
             </TouchableOpacity>
           </View>
           <View style={styles.catGrid}>
-            {CATEGORIES.map((cat) => (
-              <TouchableOpacity key={cat.id} style={styles.catCard} activeOpacity={0.85}>
+            {DISCOVER_CATEGORIES.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
+                style={styles.catCard}
+                activeOpacity={0.85}
+                onPress={() => router.push(`/category/${cat.id}`)}
+              >
                 <View style={[styles.catGradient, { backgroundColor: cat.gradient[0] }]}>
                   <View style={styles.catIconRow}>
                     <MaterialIcons name={cat.icon} size={28} color={colors.gray[0]} />
@@ -90,25 +61,11 @@ export default function DiscoverScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Community</Text>
-            <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.seeAll}>See all</Text>
-            </TouchableOpacity>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.communityRow}>
-            {COMMUNITY.map((user) => (
-              <View key={user.id} style={styles.communityCard}>
-                <View style={[styles.communityAvatar, { backgroundColor: user.color + '22', borderColor: user.color }]}>
-                  <Text style={[styles.communityInitials, { color: user.color }]}>{user.initials}</Text>
-                </View>
-                <Text style={styles.communityName} numberOfLines={1}>{user.name}</Text>
-                <Text style={styles.communityStats}>{user.tasks} tasks · {user.habits} habits</Text>
-                <TouchableOpacity style={styles.followBtn}>
-                  <MaterialIcons name="group" size={12} color={colors.primary[500]} />
-                  <Text style={styles.followBtnText}>Follow</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
+          <View style={styles.comingSoon}>
+            <MaterialIcons name="groups" size={32} color={colors.gray[400]} />
+            <Text style={styles.comingSoonText}>Community features coming soon</Text>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -278,5 +235,18 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     color: colors.primary[500],
     lineHeight: 14,
+  },
+  comingSoon: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 8,
+    backgroundColor: colors.bg.card,
+    borderRadius: radius.md,
+    marginHorizontal: spacing.screenH,
+  },
+  comingSoonText: {
+    fontSize: 14,
+    fontFamily: fonts.regular,
+    color: colors.gray[400],
   },
 });

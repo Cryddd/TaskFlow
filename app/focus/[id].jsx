@@ -2,9 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Pause, Play, SkipForward, X } from 'lucide-react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
-import { useStore } from '../../lib/store';
+import { useTasks } from '../../lib/hooks/useTasks';
+import { useLogFocusSession } from '../../lib/hooks/useMisc';
 import { colors, fonts } from '../../lib/theme';
 
 const POMODORO_MINS = 25;
@@ -13,7 +14,10 @@ const BREAK_MINS = 5;
 export default function FocusModeScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  const { tasks } = useStore();
+  const { data: tasks = [] } = useTasks();
+  const logFocusMut = useLogFocusSession();
+  const sessionStartRef = useRef(Date.now());
+  const workSecondsRef = useRef(0);
 
   const task = tasks.find((t) => t.id === id);
 
@@ -31,6 +35,7 @@ export default function FocusModeScreen() {
             clearInterval(timerRef.current);
             setRunning(false);
             if (phase === 'work') {
+              workSecondsRef.current += totalSecs;
               setPhase('break');
               setTotalSecs(BREAK_MINS * 60);
               setRemaining(BREAK_MINS * 60);
@@ -60,6 +65,19 @@ export default function FocusModeScreen() {
   const CIRC = 2 * Math.PI * R;
   const strokeDashoffset = CIRC * (1 - progress);
 
+  const endSession = () => {
+    if (workSecondsRef.current > 0 && id) {
+      logFocusMut.mutate({
+        taskId: id,
+        durationSeconds: workSecondsRef.current,
+        sessionType: 'work',
+        startedAt: new Date(sessionStartRef.current).toISOString(),
+        endedAt: new Date().toISOString(),
+      });
+    }
+    router.back();
+  };
+
   const skipBreak = () => {
     clearInterval(timerRef.current);
     setPhase('work');
@@ -72,21 +90,18 @@ export default function FocusModeScreen() {
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {/* Close */}
         <View style={styles.topBar}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <X size={24} color="rgba(255,255,255,0.7)" />
+          <TouchableOpacity onPress={endSession} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <MaterialIcons name="close" size={24} color="rgba(255,255,255,0.7)" />
           </TouchableOpacity>
-          <Text style={styles.phaseLabel}>{phase === 'work' ? 'Focus Session' : '☕ Short Break'}</Text>
+          <Text style={styles.phaseLabel}>{phase === 'work' ? 'Focus Session' : 'Short Break'}</Text>
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Task name */}
         <Text style={styles.taskName} numberOfLines={2}>
           {task?.title ?? 'Focus Session'}
         </Text>
 
-        {/* Timer Ring */}
         <View style={styles.timerWrapper}>
           <Svg width={SIZE} height={SIZE}>
             <Circle
@@ -116,25 +131,24 @@ export default function FocusModeScreen() {
           </View>
         </View>
 
-        {/* Controls */}
         <View style={styles.controls}>
           <TouchableOpacity style={styles.playBtn} onPress={() => setRunning(!running)}>
-            {running
-              ? <Pause size={32} color="#FFFFFF" />
-              : <Play size={32} color="#FFFFFF" fill="#FFFFFF" />
-            }
+            <MaterialIcons
+              name={running ? 'pause' : 'play-arrow'}
+              size={32}
+              color={colors.gray[0]}
+            />
           </TouchableOpacity>
         </View>
 
-        {/* Secondary actions */}
         <View style={styles.secondaryActions}>
           {phase === 'break' && (
             <TouchableOpacity style={styles.skipBtn} onPress={skipBreak}>
-              <SkipForward size={16} color="rgba(255,255,255,0.6)" />
+              <MaterialIcons name="skip-next" size={16} color="rgba(255,255,255,0.6)" />
               <Text style={styles.skipText}>Skip break</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.endBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.endBtn} onPress={endSession}>
             <Text style={styles.endText}>End session</Text>
           </TouchableOpacity>
         </View>
@@ -191,7 +205,7 @@ const styles = StyleSheet.create({
   timerText: {
     fontSize: 48,
     fontFamily: fonts.bold,
-    color: '#FFFFFF',
+    color: colors.gray[0],
     lineHeight: 56,
     fontVariant: ['tabular-nums'],
   },

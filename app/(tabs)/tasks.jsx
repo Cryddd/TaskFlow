@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useStore } from '../../lib/store';
+import { useTasks, useCreateTask, useToggleTask, useDeleteTask } from '../../lib/hooks/useTasks';
 import { colors, fonts, spacing, radius } from '../../lib/theme';
 import { handleTaskToggle, handleTaskDelete } from '../../lib/taskHandlers';
 import { showToast } from '../../lib/toast';
@@ -35,7 +35,10 @@ const FILTER_CHIPS = [
 
 export default function TasksScreen() {
   const router = useRouter();
-  const { tasks, toggleTask, deleteTask, addTask } = useStore();
+  const { data: tasks = [] } = useTasks();
+  const createTaskMut = useCreateTask();
+  const toggleTaskMut = useToggleTask();
+  const deleteTaskMut = useDeleteTask();
   const [category, setCategory] = useState('all');
   const [activeFilters, setActiveFilters] = useState([]);
   const [sortBy, setSortBy] = useState('priority');
@@ -64,12 +67,12 @@ export default function TasksScreen() {
     filtered = [...filtered].sort((a, b) => a.title.localeCompare(b.title));
   }
 
-  const onToggleTask = (id) => handleTaskToggle(tasks, id, toggleTask);
-  const onDeleteTask = (id) => handleTaskDelete(id, deleteTask);
+  const onToggleTask = (id) => handleTaskToggle(tasks, id, () => toggleTaskMut.mutate(id));
+  const onDeleteTask = (id) => handleTaskDelete(id, () => deleteTaskMut.mutate(id));
 
   const handleQuickAdd = () => {
     if (!quickAddText.trim()) return;
-    addTask({
+    createTaskMut.mutate({
       title: quickAddText.trim(),
       priority: 'medium',
       difficulty: 'regular',
@@ -94,14 +97,14 @@ export default function TasksScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Top Bar */}
-      <View style={styles.topBar}>
-        <Text style={styles.screenTitle}>Tasks</Text>
-        <View style={styles.topActions}>
-          <TouchableOpacity onPress={handleSort} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <MaterialIcons name="sort" size={20} color={colors.gray[600]} />
+      <View style={styles.header}>
+        <Text style={styles.title}>Tasks</Text>
+        <View style={styles.actions}>
+          <TouchableOpacity style={styles.iconBtn} onPress={handleSort}>
+            <MaterialIcons name="swap-vert" size={22} color={colors.gray[900]} />
           </TouchableOpacity>
-          <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <MaterialIcons name="tune" size={20} color={colors.gray[600]} />
+          <TouchableOpacity style={styles.iconBtn} onPress={() => {}}>
+            <MaterialIcons name="tune" size={22} color={colors.gray[900]} />
           </TouchableOpacity>
         </View>
       </View>
@@ -154,7 +157,7 @@ export default function TasksScreen() {
                 task={task}
                 onToggle={onToggleTask}
                 onDelete={onDeleteTask}
-                onPress={(t) => router.push({ pathname: '/task-new', params: { id: t.id } })}
+                onPress={(task) => router.push(`/task/${task.id}`)}
               />
             ))
           )}
@@ -184,23 +187,36 @@ export default function TasksScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg.app },
-  topBar: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.screenH,
-    height: 56,
-    backgroundColor: colors.bg.elevated,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: colors.gray[0],
     borderBottomWidth: 1,
     borderBottomColor: colors.gray[100],
   },
-  screenTitle: {
-    fontSize: 20,
+  title: {
+    fontSize: 24,
     fontFamily: fonts.bold,
     color: colors.gray[900],
-    lineHeight: 28,
+    letterSpacing: -0.3,
+    lineHeight: 32,
   },
-  topActions: { flexDirection: 'row', gap: 16 },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+  },
   scroll: { paddingBottom: 100 },
   padH: { paddingHorizontal: spacing.screenH },
   filterRow: {

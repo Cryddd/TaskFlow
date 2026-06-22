@@ -6,7 +6,7 @@ import { colors, fonts, radius } from '../../lib/theme';
 const ACTIONS = [
   { key: 'task',  label: 'New Task',  icon: 'assignment-add', route: '/task-new'  },
   { key: 'habit', label: 'New Habit', icon: 'loop',           route: '/habit-new' },
-  { key: 'note',  label: 'New Note',  icon: 'sticky-note-2',  route: null         },
+  { key: 'note',  label: 'New Note',  icon: 'sticky-note-2',  route: '/note/new'  },
   { key: 'event', label: 'New Event', icon: 'event',          route: null         },
 ];
 
@@ -87,7 +87,7 @@ export default function FABMenu({ onNavigate }) {
       <TouchableOpacity style={styles.fab} onPress={open ? closeMenu : openMenu} activeOpacity={0.9}>
         <MaterialIcons
           name={open ? 'close' : 'add'}
-          size={24}
+          size={28}
           color={colors.gray[0]}
         />
       </TouchableOpacity>
@@ -150,16 +150,16 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   fab: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: colors.primary[500],
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: colors.primary[900],
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 6,
   },
 });

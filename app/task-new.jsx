@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,9 +13,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useStore } from '../lib/store';
+import { useTasks, useCreateTask, useUpdateTask } from '../lib/hooks/useTasks';
 import { colors, fonts, spacing, radius } from '../lib/theme';
 import { showToast } from '../lib/toast';
+import {
+  getTagSuggestionGroups,
+  getSubtaskSuggestionGroups,
+  normalizeTag,
+} from '../lib/taskSuggestions';
 import PrimaryButton from '../components/ui/PrimaryButton';
 import SegmentedControl from '../components/ui/SegmentedControl';
 
@@ -43,7 +48,9 @@ const fmt = (d) => d.toISOString().split('T')[0];
 export default function TaskNewScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  const { tasks, addTask, updateTask } = useStore();
+  const { data: tasks = [] } = useTasks();
+  const createTaskMut = useCreateTask();
+  const updateTaskMut = useUpdateTask();
 
   const existing = id ? tasks.find((t) => t.id === id) : null;
 
@@ -65,32 +72,102 @@ export default function TaskNewScreen() {
   const handleSave = () => {
     if (!title.trim()) return;
     setLoading(true);
-    setTimeout(() => {
-      if (existing) {
-        updateTask(existing.id, { title: title.trim(), description, category, priority, difficulty, tags, dueDate, subtasks });
-        showToast.taskUpdated();
-      } else {
-        addTask({ title: title.trim(), description, category, priority, difficulty, tags, dueDate, dueTime: null, subtasks });
-        showToast.taskCreated();
-      }
-      setLoading(false);
-      router.back();
-    }, 200);
+    const payload = { title: title.trim(), description, category, priority, difficulty, tags, dueDate, subtasks };
+    if (existing) {
+      updateTaskMut.mutate(
+        { id: existing.id, updates: payload },
+        {
+          onSuccess: () => {
+            showToast.taskUpdated();
+            setLoading(false);
+            router.back();
+          },
+          onError: () => setLoading(false),
+        }
+      );
+    } else {
+      createTaskMut.mutate(
+        { ...payload, dueTime: null },
+        {
+          onSuccess: () => {
+            showToast.taskCreated();
+            setLoading(false);
+            router.back();
+          },
+          onError: () => setLoading(false),
+        }
+      );
+    }
+  };
+
+  const tagSuggestions = useMemo(
+    () =>
+      getTagSuggestionGroups({
+        tasks,
+        category,
+        priority,
+        title,
+        description,
+        selectedTags: tags,
+        query: newTag,
+      }),
+    [tasks, category, priority, title, description, tags, newTag]
+  );
+
+  const subtaskSuggestions = useMemo(
+    () =>
+      getSubtaskSuggestionGroups({
+        tasks,
+        category,
+        priority,
+        difficulty,
+        title,
+        description,
+        existingSubtasks: subtasks,
+        query: newSubtask,
+        tags,
+      }),
+    [tasks, category, priority, difficulty, title, description, subtasks, newSubtask, tags]
+  );
+
+  const selectTag = (raw) => {
+    const t = normalizeTag(raw);
+    if (!t || tags.includes(t)) return;
+    setTags([...tags, t]);
+    setNewTag('');
   };
 
   const addTag = () => {
-    const t = newTag.trim().startsWith('#') ? newTag.trim() : `#${newTag.trim()}`;
-    if (newTag.trim() && !tags.includes(t)) {
-      setTags([...tags, t]);
-    }
-    setNewTag('');
+    if (!newTag.trim()) return;
+    selectTag(newTag);
   };
 
   const removeTag = (tag) => setTags(tags.filter((t) => t !== tag));
 
-  const addSubtask = () => {
-    if (!newSubtask.trim()) return;
-    setSubtasks([...subtasks, { id: `st${Date.now()}`, title: newSubtask.trim(), completed: false }]);
+  const addSubtaskTitle = (titleText) => {
+    const trimmed = titleText.trim();
+    if (!trimmed) return;
+    const exists = subtasks.some((s) => s.title.toLowerCase() === trimmed.toLowerCase());
+    if (exists) return;
+    setSubtasks([
+      ...subtasks,
+      { id: `st${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, title: trimmed, completed: false },
+    ]);
+    setNewSubtask('');
+  };
+
+  const addSubtask = () => addSubtaskTitle(newSubtask);
+
+  const addSubtaskTemplate = (steps) => {
+    const existing = new Set(subtasks.map((s) => s.title.toLowerCase()));
+    const fresh = steps.filter((step) => !existing.has(step.toLowerCase()));
+    if (!fresh.length) return;
+    const stamped = fresh.map((step, i) => ({
+      id: `st${Date.now()}-${i}`,
+      title: step,
+      completed: false,
+    }));
+    setSubtasks([...subtasks, ...stamped]);
     setNewSubtask('');
   };
 
@@ -245,6 +322,44 @@ export default function TaskNewScreen() {
                 returnKeyType="done"
               />
             </View>
+
+            {tagSuggestions.flat.length > 0 && (
+              <View style={styles.suggestionBlock}>
+                {tagSuggestions.groups.map((group) => (
+                  <View key={group.id} style={styles.suggestionGroup}>
+                    <Text style={styles.suggestionGroupLabel}>{group.title}</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.suggestionChipRow}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {group.items.map((item) => (
+                        <TouchableOpacity
+                          key={item.tag}
+                          style={styles.suggestionChip}
+                          onPress={() => selectTag(item.tag)}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialIcons name="add" size={14} color={colors.primary[600]} />
+                          <Text style={styles.suggestionChipText}>{item.tag}</Text>
+                          <Text style={styles.suggestionChipHint}>{item.reason}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {newTag.trim() && (
+              <TouchableOpacity style={styles.customAddRow} onPress={addTag} activeOpacity={0.7}>
+                <MaterialIcons name="label" size={16} color={colors.primary[500]} />
+                <Text style={styles.customAddText}>
+                  Create <Text style={styles.customAddHighlight}>{normalizeTag(newTag)}</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.divider} />
@@ -268,6 +383,74 @@ export default function TaskNewScreen() {
           {/* Subtasks */}
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>Subtasks</Text>
+
+            {subtaskSuggestions.templates.length > 0 && (
+              <View style={styles.suggestionBlock}>
+                <Text style={styles.suggestionGroupLabel}>
+                  {title.trim() ? 'Checklists matched to your task' : 'Start with a checklist'}
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.templateCardRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {subtaskSuggestions.templates.map((tpl) => (
+                    <View key={tpl.id} style={styles.templateCard}>
+                      <View style={styles.templateCardHeader}>
+                        <View style={styles.templateIconWrap}>
+                          <MaterialIcons name={tpl.icon} size={18} color={colors.primary[600]} />
+                        </View>
+                        <Text style={styles.templateCardTitle} numberOfLines={1}>{tpl.label}</Text>
+                      </View>
+                      <Text style={styles.templateCardMeta}>
+                        {tpl.remainingSteps.length} step{tpl.remainingSteps.length === 1 ? '' : 's'}
+                      </Text>
+                      <View style={styles.templatePreview}>
+                        {tpl.remainingSteps.slice(0, 3).map((step) => (
+                          <Text key={step} style={styles.templatePreviewStep} numberOfLines={1}>
+                            • {step}
+                          </Text>
+                        ))}
+                        {tpl.remainingSteps.length > 3 && (
+                          <Text style={styles.templatePreviewMore}>
+                            +{tpl.remainingSteps.length - 3} more
+                          </Text>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        style={styles.templateAddBtn}
+                        onPress={() => addSubtaskTemplate(tpl.remainingSteps)}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialIcons name="playlist-add" size={16} color={colors.primary[500]} />
+                        <Text style={styles.templateAddBtnText}>Add all</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {subtaskSuggestions.quickAdds.length > 0 && (
+              <View style={styles.suggestionBlock}>
+                <Text style={styles.suggestionGroupLabel}>Suggested steps</Text>
+                <View style={styles.quickAddWrap}>
+                  {subtaskSuggestions.quickAdds.map((item) => (
+                    <TouchableOpacity
+                      key={item.title}
+                      style={styles.quickAddChip}
+                      onPress={() => addSubtaskTitle(item.title)}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialIcons name="add-circle-outline" size={14} color={colors.primary[500]} />
+                      <Text style={styles.quickAddText}>{item.title}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {subtasks.map((s) => (
               <View key={s.id} style={styles.subtaskRow}>
                 <TouchableOpacity
@@ -296,6 +479,15 @@ export default function TaskNewScreen() {
                 returnKeyType="done"
               />
             </View>
+
+            {newSubtask.trim() && (
+              <TouchableOpacity style={styles.customAddRow} onPress={addSubtask} activeOpacity={0.7}>
+                <MaterialIcons name="checklist" size={16} color={colors.primary[500]} />
+                <Text style={styles.customAddText}>
+                  Add custom step: <Text style={styles.customAddHighlight}>{newSubtask.trim()}</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={[styles.field, { marginTop: 8 }]}>
@@ -487,5 +679,168 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     color: colors.gray[900],
     lineHeight: 22,
+  },
+  suggestionBlock: {
+    marginTop: 12,
+    gap: 10,
+  },
+  suggestionGroup: {
+    gap: 6,
+  },
+  suggestionGroupLabel: {
+    fontSize: 11,
+    fontFamily: fonts.semibold,
+    color: colors.gray[400],
+    lineHeight: 16,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  suggestionChipRow: {
+    gap: 8,
+    paddingRight: 4,
+  },
+  suggestionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.gray[25],
+    borderWidth: 1,
+    borderColor: colors.gray[100],
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    maxWidth: 200,
+  },
+  suggestionChipText: {
+    fontSize: 12,
+    fontFamily: fonts.semibold,
+    color: colors.primary[800],
+    lineHeight: 16,
+  },
+  suggestionChipHint: {
+    fontSize: 10,
+    fontFamily: fonts.regular,
+    color: colors.gray[400],
+    lineHeight: 14,
+    flexShrink: 1,
+  },
+  customAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: colors.primary[50],
+    borderRadius: radius.md,
+  },
+  customAddText: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: colors.gray[600],
+    lineHeight: 18,
+    flex: 1,
+  },
+  customAddHighlight: {
+    fontFamily: fonts.semibold,
+    color: colors.primary[600],
+  },
+  templateCardRow: {
+    gap: 10,
+    paddingRight: 4,
+  },
+  templateCard: {
+    width: 200,
+    backgroundColor: colors.gray[25],
+    borderWidth: 1,
+    borderColor: colors.gray[100],
+    borderRadius: radius.lg,
+    padding: 12,
+    gap: 6,
+  },
+  templateCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  templateIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: colors.primary[50],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  templateCardTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: fonts.semibold,
+    color: colors.gray[900],
+    lineHeight: 18,
+  },
+  templateCardMeta: {
+    fontSize: 11,
+    fontFamily: fonts.medium,
+    color: colors.gray[400],
+    lineHeight: 16,
+  },
+  templatePreview: {
+    gap: 2,
+    minHeight: 48,
+  },
+  templatePreviewStep: {
+    fontSize: 11,
+    fontFamily: fonts.regular,
+    color: colors.gray[600],
+    lineHeight: 16,
+  },
+  templatePreviewMore: {
+    fontSize: 10,
+    fontFamily: fonts.medium,
+    color: colors.primary[500],
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  templateAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 4,
+    paddingVertical: 6,
+    borderRadius: radius.md,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1,
+    borderColor: colors.primary[100],
+  },
+  templateAddBtnText: {
+    fontSize: 12,
+    fontFamily: fonts.semibold,
+    color: colors.primary[500],
+    lineHeight: 16,
+  },
+  quickAddWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickAddChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1,
+    borderColor: colors.gray[100],
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    maxWidth: '100%',
+  },
+  quickAddText: {
+    fontSize: 12,
+    fontFamily: fonts.medium,
+    color: colors.gray[900],
+    lineHeight: 16,
+    flexShrink: 1,
   },
 });

@@ -8,30 +8,40 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Bell, Plus, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useStore } from '../lib/store';
+import { useTasks } from '../lib/hooks/useTasks';
+import { useNutrition, useAddMealItem } from '../lib/hooks/useMisc';
 import { colors, fonts, spacing, radius, shadows } from '../lib/theme';
 import WeekStrip from '../components/ui/WeekStrip';
 import MacroBar from '../components/ui/MacroBar';
 
 const MEAL_ICONS = {
-  Breakfast: '🌅',
-  Lunch:     '☀️',
-  Dinner:    '🌙',
-  Snacks:    '🍎',
+  Breakfast: 'free-breakfast',
+  Lunch:     'lunch-dining',
+  Dinner:    'dinner-dining',
+  Snacks:    'restaurant',
 };
 
-function MealGroup({ meal, defaultExpanded = true }) {
+function MealGroup({ meal, defaultExpanded = true, onAddFood }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const totalCals = meal.items.reduce((s, i) => s + i.calories, 0);
 
   return (
     <View style={styles.mealGroup}>
       <TouchableOpacity style={styles.mealHeader} onPress={() => setExpanded(!expanded)} activeOpacity={0.7}>
-        <Text style={styles.mealIcon}>{MEAL_ICONS[meal.type] ?? '🍽️'}</Text>
+        <MaterialIcons
+          name={MEAL_ICONS[meal.type] ?? 'restaurant'}
+          size={18}
+          color={colors.gray[600]}
+        />
         <Text style={styles.mealType}>{meal.type}</Text>
         <Text style={styles.mealCals}>{totalCals} kcal</Text>
-        {expanded ? <ChevronUp size={16} color={colors.gray[400]} /> : <ChevronDown size={16} color={colors.gray[400]} />}
+        <MaterialIcons
+          name={expanded ? 'expand-less' : 'expand-more'}
+          size={18}
+          color={colors.gray[400]}
+        />
       </TouchableOpacity>
 
       {expanded && (
@@ -51,8 +61,8 @@ function MealGroup({ meal, defaultExpanded = true }) {
               </View>
             ))
           )}
-          <TouchableOpacity style={styles.addFoodRow}>
-            <Plus size={14} color={colors.primary[500]} />
+          <TouchableOpacity style={styles.addFoodRow} onPress={() => onAddFood?.(meal.type)}>
+            <MaterialIcons name="add" size={14} color={colors.primary[500]} />
             <Text style={styles.addFoodText}>Add food</Text>
           </TouchableOpacity>
         </View>
@@ -63,8 +73,28 @@ function MealGroup({ meal, defaultExpanded = true }) {
 
 export default function NutritionScreen() {
   const router = useRouter();
-  const { nutrition, selectedDate, setSelectedDate, tasks } = useStore();
-  const { calories, protein, carbs, fat, meals } = nutrition;
+  const { selectedDate, setSelectedDate } = useStore();
+  const { data: nutrition, isLoading } = useNutrition(selectedDate);
+  const addMealMut = useAddMealItem();
+  const { data: tasks = [] } = useTasks();
+
+  const calories = nutrition?.calories ?? { current: 0, target: 1800 };
+  const protein = nutrition?.protein ?? { current: 0, target: 150, unit: 'g' };
+  const carbs = nutrition?.carbs ?? { current: 0, target: 200, unit: 'g' };
+  const fat = nutrition?.fat ?? { current: 0, target: 67, unit: 'g' };
+  const meals = nutrition?.meals ?? [];
+
+  const handleAddFood = (mealType) => {
+    addMealMut.mutate({
+      date: selectedDate,
+      mealType,
+      name: 'Logged food',
+      calories: 100,
+      protein: 5,
+      carbs: 10,
+      fat: 3,
+    });
+  };
 
   const calPct = Math.round((calories.current / calories.target) * 100);
 
@@ -78,11 +108,11 @@ export default function NutritionScreen() {
       {/* Top Bar */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <ArrowLeft size={24} color={colors.gray[900]} />
+          <MaterialIcons name="arrow-back" size={24} color={colors.gray[900]} />
         </TouchableOpacity>
         <Text style={styles.screenTitle}>Nutrition</Text>
         <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Bell size={22} color={colors.gray[600]} />
+          <MaterialIcons name="notifications" size={22} color={colors.gray[600]} />
         </TouchableOpacity>
       </View>
 
@@ -160,6 +190,7 @@ export default function NutritionScreen() {
                 key={meal.id}
                 meal={meal}
                 defaultExpanded={idx < 2}
+                onAddFood={handleAddFood}
               />
             ))}
           </View>
@@ -170,7 +201,7 @@ export default function NutritionScreen() {
 
       {/* FAB */}
       <TouchableOpacity style={styles.addFab}>
-        <Plus size={20} color={colors.primary[500]} />
+        <MaterialIcons name="add" size={20} color={colors.primary[500]} />
         <Text style={styles.addFabText}>Log Meal</Text>
       </TouchableOpacity>
     </SafeAreaView>
@@ -285,7 +316,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 10,
   },
-  mealIcon: { fontSize: 18 },
   mealType: {
     flex: 1,
     fontSize: 15,

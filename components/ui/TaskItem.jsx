@@ -142,8 +142,12 @@ export default function TaskItem({ task, onToggle, onDelete, onPress }) {
             )}
           </TouchableOpacity>
 
-          {/* Content */}
-          <View style={styles.content}>
+          {/* Content — tap body opens detail */}
+          <TouchableOpacity
+            style={styles.content}
+            onPress={() => onPress?.(task)}
+            activeOpacity={0.7}
+          >
             <View style={styles.titleRow}>
               {/* Priority dot */}
               <View style={[styles.priorityDot, { backgroundColor: priorityColors[task.priority] ?? priorityColors.none }]} />
@@ -174,7 +178,7 @@ export default function TaskItem({ task, onToggle, onDelete, onPress }) {
                 </View>
               )}
             </View>
-          </View>
+          </TouchableOpacity>
         </Animated.View>
       </GestureDetector>
     </Animated.View>

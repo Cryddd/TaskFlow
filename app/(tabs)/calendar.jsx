@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useStore } from '../../lib/store';
+import { useTasks } from '../../lib/hooks/useTasks';
 import { colors, fonts, spacing, radius, shadows, priority as priorityColors } from '../../lib/theme';
 
 const fmt = (d) => d.toISOString().split('T')[0];
@@ -16,7 +16,7 @@ function formatAgendaDate(dateStr) {
 }
 
 export default function CalendarScreen() {
-  const { tasks, toggleTask } = useStore();
+  const { data: tasks = [] } = useTasks();
   const [selected, setSelected] = useState(today);
   const [viewMode, setViewMode] = useState('month');
 

@@ -11,8 +11,9 @@ import {
   Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useHabits, useCreateHabit, useUpdateHabit } from '../lib/hooks/useHabits';
 import { colors, fonts, spacing, radius } from '../lib/theme';
 import { showToast } from '../lib/toast';
 import PrimaryButton from '../components/ui/PrimaryButton';
@@ -24,14 +25,19 @@ const ICONS = ['💧', '🏃', '📚', '🧘', '💪', '🍎', '😴', '✍️',
 
 export default function HabitNewScreen() {
   const router = useRouter();
+  const { id } = useLocalSearchParams();
+  const { data: habits = [] } = useHabits();
+  const createHabitMut = useCreateHabit();
+  const updateHabitMut = useUpdateHabit();
+  const existing = id ? habits.find((h) => h.id === id) : null;
 
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [icon, setIcon] = useState('💧');
+  const [name, setName] = useState(existing?.name ?? '');
+  const [description, setDescription] = useState(existing?.description ?? '');
+  const [icon, setIcon] = useState(existing?.icon ?? '💧');
   const [selectedDays, setSelectedDays] = useState([0, 1, 2, 3, 4, 5, 6]);
-  const [remind, setRemind] = useState(false);
-  const [difficulty, setDifficulty] = useState('regular');
-  const [category, setCategory] = useState('Health');
+  const [remind, setRemind] = useState(existing?.reminder !== 'None');
+  const [difficulty, setDifficulty] = useState(existing?.difficulty ?? 'regular');
+  const [category, setCategory] = useState(existing?.category ?? 'Health');
   const [loading, setLoading] = useState(false);
 
   const toggleDay = (idx) => {
@@ -43,11 +49,40 @@ export default function HabitNewScreen() {
   const handleSave = () => {
     if (!name.trim()) return;
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      showToast.habitCreated();
-      router.back();
-    }, 300);
+    const targetDays = selectedDays.sort((a, b) => a - b).map((i) => DAY_LABELS[i]);
+    const payload = {
+      name: name.trim(),
+      description,
+      icon,
+      category,
+      difficulty: difficulty.toLowerCase(),
+      targetDays,
+      color: colors.primary[500],
+      reminderEnabled: remind,
+      reminderTime: remind ? '08:00' : null,
+    };
+    if (existing) {
+      updateHabitMut.mutate(
+        { id: existing.id, updates: payload },
+        {
+          onSuccess: () => {
+            setLoading(false);
+            showToast.habitCreated();
+            router.back();
+          },
+          onError: () => setLoading(false),
+        }
+      );
+    } else {
+      createHabitMut.mutate(payload, {
+        onSuccess: () => {
+          setLoading(false);
+          showToast.habitCreated();
+          router.back();
+        },
+        onError: () => setLoading(false),
+      });
+    }
   };
 
   const DIFFICULTIES = ['Easy', 'Regular', 'Hard'];
@@ -61,7 +96,7 @@ export default function HabitNewScreen() {
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <MaterialIcons name="arrow-back" size={24} color={colors.gray[900]} />
           </TouchableOpacity>
-          <Text style={styles.title}>Add Habit</Text>
+          <Text style={styles.title}>{existing ? 'Edit Habit' : 'Add Habit'}</Text>
           <View style={{ width: 40 }} />
         </View>
 

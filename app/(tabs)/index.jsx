@@ -12,12 +12,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useStore } from '../../lib/store';
+import { useTasks, useToggleTask, useDeleteTask, getSuggestedTasks, getDailyStats, getOverdueCount } from '../../lib/hooks/useTasks';
+import { useHabits } from '../../lib/hooks/useHabits';
+import { useNotes } from '../../lib/hooks/useNotes';
+import { useGoals } from '../../lib/hooks/useGoals';
+import { useProfile } from '../../lib/hooks/useProfile';
 import { colors, fonts, spacing, radius, shadows } from '../../lib/theme';
 import {
   handleTaskToggle,
   handleTaskDelete,
-  handleHabitToggle,
-  getOverdueCount,
 } from '../../lib/taskHandlers';
 import { showToast } from '../../lib/toast';
 import DailyCommandCenter from '../../components/ui/DailyCommandCenter';
@@ -31,11 +34,14 @@ const fmt = (d) => d.toISOString().split('T')[0];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const {
-    tasks, habits, notes, selectedDate, setSelectedDate,
-    toggleTask, deleteTask, toggleHabit, getDailyStats, getSuggestedTasks,
-  } = useStore();
-
+  const { selectedDate, setSelectedDate } = useStore();
+  const { data: tasks = [], refetch: refetchTasks, isLoading: tasksLoading } = useTasks();
+  const { data: habits = [], refetch: refetchHabits } = useHabits();
+  const { data: notes = [], refetch: refetchNotes } = useNotes();
+  const { data: goals = [] } = useGoals();
+  const { data: profile } = useProfile();
+  const toggleTaskMut = useToggleTask();
+  const deleteTaskMut = useDeleteTask();
   const [refreshing, setRefreshing] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -47,12 +53,13 @@ export default function HomeScreen() {
     }
   }, []);
 
-  const onToggleTask = (id) => handleTaskToggle(tasks, id, toggleTask);
-  const onDeleteTask = (id) => handleTaskDelete(id, deleteTask);
-  const onToggleHabit = (id) => handleHabitToggle(habits, id, toggleHabit);
+  const onToggleTask = (id) => handleTaskToggle(tasks, id, () => toggleTaskMut.mutate(id));
+  const onDeleteTask = (id) => handleTaskDelete(id, () => deleteTaskMut.mutate(id));
+  const goToTask = (task) => router.push(`/task/${task.id}`);
+  const goToHabit = (habitId) => router.push(`/habit/${habitId}`);
 
-  const stats = getDailyStats();
-  const suggested = getSuggestedTasks();
+  const stats = getDailyStats(tasks, habits, goals, selectedDate);
+  const suggested = getSuggestedTasks(tasks, selectedDate);
 
   const todayTasks = tasks.filter((t) => t.dueDate === selectedDate);
   const inProgress = todayTasks.filter((t) => t.status === 'in_progress' && !t.completed);
@@ -67,9 +74,10 @@ export default function HomeScreen() {
   const headerOpacity = scrollY.interpolate({ inputRange: [0, 60], outputRange: [1, 0.92], extrapolate: 'clamp' });
   const headerHeight = scrollY.interpolate({ inputRange: [0, 60], outputRange: [56, 48], extrapolate: 'clamp' });
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+    await Promise.all([refetchTasks(), refetchHabits(), refetchNotes()]);
+    setRefreshing(false);
   };
 
   const today = new Date();
@@ -88,7 +96,7 @@ export default function HomeScreen() {
             <MaterialIcons name="search" size={22} color={colors.gray[900]} />
           </TouchableOpacity>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>JD</Text>
+            <Text style={styles.avatarText}>{profile?.initials ?? '?'}</Text>
           </View>
         </View>
       </Animated.View>
@@ -143,12 +151,14 @@ export default function HomeScreen() {
             title="Habits"
             count={habits.length}
             rightElement={
-              <TouchableOpacity
-                onPress={() => router.push('/habit-new')}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <MaterialIcons name="add" size={20} color={colors.primary[500]} />
-              </TouchableOpacity>
+              <View style={styles.headerActions}>
+                <TouchableOpacity onPress={() => router.push('/see-all-habits')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.seeAllLink}>See all</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => router.push('/habit-new')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <MaterialIcons name="add" size={20} color={colors.primary[500]} />
+                </TouchableOpacity>
+              </View>
             }
           />
           <ScrollView
@@ -157,7 +167,7 @@ export default function HomeScreen() {
             contentContainerStyle={styles.habitScroll}
           >
             {habits.map((h) => (
-              <HabitRing key={h.id} habit={h} onPress={() => onToggleHabit(h.id)} />
+              <HabitRing key={h.id} habit={h} onPress={() => goToHabit(h.id)} />
             ))}
           </ScrollView>
         </View>
@@ -168,9 +178,14 @@ export default function HomeScreen() {
             title="Today's Tasks"
             count={todayTasks.length}
             rightElement={
-              <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <MaterialIcons name="tune" size={18} color={colors.gray[400]} />
-              </TouchableOpacity>
+              <View style={styles.headerActions}>
+                <TouchableOpacity onPress={() => router.push('/see-all-tasks')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.seeAllLink}>See all</Text>
+                </TouchableOpacity>
+                <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <MaterialIcons name="tune" size={18} color={colors.gray[400]} />
+                </TouchableOpacity>
+              </View>
             }
           />
 
@@ -185,7 +200,7 @@ export default function HomeScreen() {
                     task={t}
                     onToggle={onToggleTask}
                     onDelete={onDeleteTask}
-                    onPress={(task) => router.push({ pathname: '/task-new', params: { id: task.id } })}
+                    onPress={goToTask}
                   />
                 ))}
               </View>
@@ -203,7 +218,7 @@ export default function HomeScreen() {
                     task={t}
                     onToggle={onToggleTask}
                     onDelete={onDeleteTask}
-                    onPress={(task) => router.push({ pathname: '/task-new', params: { id: task.id } })}
+                    onPress={goToTask}
                   />
                 ))}
               </View>
@@ -233,6 +248,7 @@ export default function HomeScreen() {
                       task={t}
                       onToggle={onToggleTask}
                       onDelete={onDeleteTask}
+                      onPress={goToTask}
                     />
                   ))}
                 </View>
@@ -261,14 +277,26 @@ export default function HomeScreen() {
           <SectionHeader
             title="Notes"
             rightElement={
-              <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <MaterialIcons name="add" size={20} color={colors.primary[500]} />
-              </TouchableOpacity>
+              <View style={styles.headerActions}>
+                <TouchableOpacity onPress={() => router.push('/see-all-notes')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.seeAllLink}>See all</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => router.push('/note/new')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <MaterialIcons name="add" size={20} color={colors.primary[500]} />
+                </TouchableOpacity>
+              </View>
             }
           />
           <View style={styles.notesGrid}>
             {notes.map((note) => (
-              <NoteCard key={note.id} note={note} />
+              <NoteCard
+                key={note.id}
+                note={note}
+                onPress={() => router.push(`/note/${note.id}`)}
+              />
             ))}
           </View>
         </View>
@@ -335,6 +363,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
     paddingRight: spacing.screenH,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  seeAllLink: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+    color: colors.primary[500],
+    lineHeight: 18,
   },
   taskGroup: {
     marginBottom: 12,

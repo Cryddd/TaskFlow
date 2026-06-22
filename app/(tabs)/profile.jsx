@@ -1,13 +1,17 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useStore } from '../../lib/store';
+import { useAuth } from '../../lib/AuthContext';
+import { useProfile, useProfileStats } from '../../lib/hooks/useProfile';
+import { queryClient } from '../../lib/providers';
 import { colors, fonts, spacing, radius, shadows } from '../../lib/theme';
 import { showToast } from '../../lib/toast';
 
 const SETTINGS = [
   {
     id: 'info',
+    route: '/personal-information',
     icon: 'manage-accounts',
     title: 'Personal Information',
     subtitle: 'Change name, email, password',
@@ -15,6 +19,7 @@ const SETTINGS = [
   },
   {
     id: 'notifs',
+    route: '/notification-settings',
     icon: 'notifications',
     title: 'Notifications',
     subtitle: 'Manage notification preferences',
@@ -22,6 +27,7 @@ const SETTINGS = [
   },
   {
     id: 'privacy',
+    route: '/privacy-security',
     icon: 'lock',
     title: 'Privacy & Security',
     subtitle: 'Terms of service',
@@ -29,6 +35,7 @@ const SETTINGS = [
   },
   {
     id: 'support',
+    route: '/contact-support',
     icon: 'headset-mic',
     title: 'Contact Support',
     subtitle: 'Get help from our team',
@@ -37,17 +44,16 @@ const SETTINGS = [
 ];
 
 export default function ProfileScreen() {
-  const { tasks, habits } = useStore();
-
-  const completedTasks = tasks.filter((t) => t.completed).length;
-  const streakMax = habits.reduce((m, h) => Math.max(m, h.streak), 0);
-  const daysActive = 21;
+  const router = useRouter();
+  const { signOut } = useAuth();
+  const { data: profile } = useProfile();
+  const { data: statsData } = useProfileStats();
 
   const stats = [
-    { label: 'Tasks Done',  value: completedTasks },
-    { label: 'Habits',      value: habits.length  },
-    { label: 'Streak',      value: `${streakMax}d` },
-    { label: 'Days Active', value: daysActive      },
+    { label: 'Tasks Done',  value: statsData?.completedTasks ?? 0 },
+    { label: 'Habits',      value: statsData?.habitCount ?? 0 },
+    { label: 'Streak',      value: `${statsData?.streakMax ?? 0}d` },
+    { label: 'Days Active', value: statsData?.daysActive ?? 1 },
   ];
 
   const handleLogout = () => {
@@ -56,7 +62,16 @@ export default function ProfileScreen() {
       'Are you sure you want to log out?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Log Out', style: 'destructive', onPress: () => showToast.logoutConfirmed() },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            queryClient.clear();
+            await signOut();
+            showToast.logoutConfirmed();
+            router.replace('/(auth)/login');
+          },
+        },
       ]
     );
   };
@@ -72,18 +87,22 @@ export default function ProfileScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={[styles.profileCard, shadows.card]}>
-          <TouchableOpacity style={styles.editBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity
+            style={styles.editBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            onPress={() => router.push('/edit-profile')}
+          >
             <MaterialIcons name="edit" size={16} color={colors.gray[600]} />
           </TouchableOpacity>
 
           <View style={styles.avatarWrapper}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>JD</Text>
+              <Text style={styles.avatarText}>{profile?.initials ?? '?'}</Text>
             </View>
           </View>
 
-          <Text style={styles.name}>John Doe</Text>
-          <Text style={styles.email}>john.doe@example.com</Text>
+          <Text style={styles.name}>{profile?.fullName ?? 'User'}</Text>
+          <Text style={styles.email}>{profile?.email ?? ''}</Text>
 
           <View style={styles.statsRow}>
             {stats.map((s) => (
@@ -103,6 +122,7 @@ export default function ProfileScreen() {
                 key={item.id}
                 style={[styles.settingsRow, idx < SETTINGS.length - 1 && styles.settingsBorder]}
                 activeOpacity={0.7}
+                onPress={() => router.push(item.route)}
               >
                 <View style={[styles.iconCircle, { backgroundColor: item.color + '18' }]}>
                   <MaterialIcons name={item.icon} size={18} color={item.color} />
