@@ -1,11 +1,13 @@
 {
   "name": "taskflow",
   "version": "1.0.0",
-  "main": "expo/AppEntry.js",
+  "main": "expo-router/entry",
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
     "expo": "~52.0.49",
+    "expo-asset": "~11.0.5",
     "expo-constants": "~17.0.8",
+    "expo-font": "~13.0.4",
     "expo-linking": "~7.0.5",
     "expo-router": "~4.0.22",
     "expo-status-bar": "~2.0.1",
