@@ -10,7 +10,8 @@ const ACTIONS = [
   { key: 'event', label: 'New Event', icon: 'event',          route: null         },
 ];
 
-export default function FABMenu({ onNavigate }) {
+export default function FABMenu({ onNavigate, variant = 'floating' }) {
+  const isTab = variant === 'tab';
   const [open, setOpen] = useState(false);
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const itemAnims = useRef(ACTIONS.map(() => new Animated.Value(0))).current;
@@ -56,7 +57,10 @@ export default function FABMenu({ onNavigate }) {
           <Pressable style={StyleSheet.absoluteFill} onPress={closeMenu} />
         </Animated.View>
 
-        <View style={styles.actionsContainer} pointerEvents="box-none">
+        <View
+          style={[styles.actionsContainer, isTab && styles.actionsContainerTab]}
+          pointerEvents="box-none"
+        >
           {[...ACTIONS].reverse().map((action, idx) => {
             const realIdx = ACTIONS.length - 1 - idx;
             const anim = itemAnims[realIdx];
@@ -64,7 +68,11 @@ export default function FABMenu({ onNavigate }) {
             return (
               <Animated.View
                 key={action.key}
-                style={[styles.actionItem, { opacity: anim, transform: [{ translateY }] }]}
+                style={[
+                  styles.actionItem,
+                  isTab && styles.actionItemTab,
+                  { opacity: anim, transform: [{ translateY }] },
+                ]}
               >
                 <TouchableOpacity
                   style={styles.actionBtn}
@@ -84,10 +92,14 @@ export default function FABMenu({ onNavigate }) {
         </View>
       </Modal>
 
-      <TouchableOpacity style={styles.fab} onPress={open ? closeMenu : openMenu} activeOpacity={0.9}>
+      <TouchableOpacity
+        style={[styles.fab, isTab && styles.tabFab]}
+        onPress={open ? closeMenu : openMenu}
+        activeOpacity={0.9}
+      >
         <MaterialIcons
           name={open ? 'close' : 'add'}
-          size={28}
+          size={isTab ? 26 : 28}
           color={colors.gray[0]}
         />
       </TouchableOpacity>
@@ -107,8 +119,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 12,
   },
+  actionsContainerTab: {
+    bottom: 90,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
   actionItem: {
     alignItems: 'flex-end',
+  },
+  actionItemTab: {
+    alignItems: 'center',
   },
   actionBtn: {
     flexDirection: 'row',
@@ -161,5 +182,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 6,
+  },
+  tabFab: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    marginTop: -18,
   },
 });

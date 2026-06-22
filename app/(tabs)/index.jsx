@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { TapGestureHandler, State } from 'react-native-gesture-handler';
 import { useStore } from '../../lib/store';
 import { useTasks, useToggleTask, useDeleteTask, getSuggestedTasks, getDailyStats, getOverdueCount } from '../../lib/hooks/useTasks';
 import { useHabits } from '../../lib/hooks/useHabits';
@@ -28,6 +29,7 @@ import HabitRing from '../../components/ui/HabitRing';
 import TaskItem from '../../components/ui/TaskItem';
 import SectionHeader from '../../components/ui/SectionHeader';
 import WeekStrip from '../../components/ui/WeekStrip';
+import MonthCalendarPicker from '../../components/ui/MonthCalendarPicker';
 import NoteCard from '../../components/ui/NoteCard';
 
 const fmt = (d) => d.toISOString().split('T')[0];
@@ -44,7 +46,16 @@ export default function HomeScreen() {
   const deleteTaskMut = useDeleteTask();
   const [refreshing, setRefreshing] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
+
+  const toggleCalendar = () => setShowCalendar((prev) => !prev);
+
+  const onDateSectionDoubleTap = ({ nativeEvent }) => {
+    if (nativeEvent.state === State.ACTIVE) {
+      toggleCalendar();
+    }
+  };
 
   useEffect(() => {
     const overdueCount = getOverdueCount(tasks);
@@ -81,7 +92,8 @@ export default function HomeScreen() {
   };
 
   const today = new Date();
-  const monthYear = today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const displayDate = selectedDate ? new Date(selectedDate + 'T00:00:00') : today;
+  const monthYear = displayDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -108,13 +120,25 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
       >
-        {/* Week Strip */}
+        {/* Week Strip / Floating Calendar */}
         <View style={styles.section}>
-          <WeekStrip
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            tasksPerDate={tasksPerDate}
-          />
+          <TapGestureHandler onHandlerStateChange={onDateSectionDoubleTap} numberOfTaps={2}>
+            <View>
+              {showCalendar ? (
+                <MonthCalendarPicker
+                  selectedDate={selectedDate}
+                  onSelectDate={setSelectedDate}
+                  tasksPerDate={tasksPerDate}
+                />
+              ) : (
+                <WeekStrip
+                  selectedDate={selectedDate}
+                  onSelectDate={setSelectedDate}
+                  tasksPerDate={tasksPerDate}
+                />
+              )}
+            </View>
+          </TapGestureHandler>
         </View>
 
         {/* Daily Command Center */}
