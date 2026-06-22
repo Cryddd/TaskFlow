@@ -46,8 +46,10 @@ export default function HabitNewScreen() {
     );
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) return;
+    if (loading || createHabitMut.isPending || updateHabitMut.isPending) return;
+
     setLoading(true);
     const targetDays = selectedDays.sort((a, b) => a - b).map((i) => DAY_LABELS[i]);
     const payload = {
@@ -61,27 +63,19 @@ export default function HabitNewScreen() {
       reminderEnabled: remind,
       reminderTime: remind ? '08:00' : null,
     };
-    if (existing) {
-      updateHabitMut.mutate(
-        { id: existing.id, updates: payload },
-        {
-          onSuccess: () => {
-            setLoading(false);
-            showToast.habitCreated();
-            router.back();
-          },
-          onError: () => setLoading(false),
-        }
-      );
-    } else {
-      createHabitMut.mutate(payload, {
-        onSuccess: () => {
-          setLoading(false);
-          showToast.habitCreated();
-          router.back();
-        },
-        onError: () => setLoading(false),
-      });
+
+    try {
+      if (existing) {
+        await updateHabitMut.mutateAsync({ id: existing.id, updates: payload });
+      } else {
+        await createHabitMut.mutateAsync(payload);
+      }
+      showToast.habitCreated();
+      router.back();
+    } catch {
+      // Mutation hooks already surface the Supabase error via toast.
+    } finally {
+      setLoading(false);
     }
   };
 

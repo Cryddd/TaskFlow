@@ -118,12 +118,14 @@ export default function TaskNewScreen() {
     setHydrated(true);
   }, [id, existing, hydrated]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim()) {
       showToast.saveFailed('Add a task title to continue');
       titleRef.current?.focus();
       return;
     }
+    if (loading || createTaskMut.isPending || updateTaskMut.isPending) return;
+
     setLoading(true);
     const payload = {
       title: title.trim(),
@@ -137,36 +139,20 @@ export default function TaskNewScreen() {
       reminderEnabled: remind,
       reminderTime: remind ? formatReminderTime(reminderTime) : null,
     };
-    if (existing) {
-      updateTaskMut.mutate(
-        { id: existing.id, updates: payload },
-        {
-          onSuccess: () => {
-            showToast.taskUpdated();
-            setLoading(false);
-            router.back();
-          },
-          onError: () => {
-            setLoading(false);
-            showToast.saveFailed();
-          },
-        }
-      );
-    } else {
-      createTaskMut.mutate(
-        { ...payload, dueTime: null },
-        {
-          onSuccess: () => {
-            showToast.taskCreated();
-            setLoading(false);
-            router.back();
-          },
-          onError: () => {
-            setLoading(false);
-            showToast.saveFailed();
-          },
-        }
-      );
+
+    try {
+      if (existing) {
+        await updateTaskMut.mutateAsync({ id: existing.id, updates: payload });
+        showToast.taskUpdated();
+      } else {
+        await createTaskMut.mutateAsync({ ...payload, dueTime: null });
+        showToast.taskCreated();
+      }
+      router.back();
+    } catch {
+      // Mutation hooks already surface the Supabase error via toast.
+    } finally {
+      setLoading(false);
     }
   };
 
