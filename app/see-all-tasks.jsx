@@ -41,7 +41,7 @@ export default function SeeAllTasksScreen() {
     <View style={styles.screen}>
       <ScreenHeader title="All Tasks" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <SegmentedControl options={CATEGORIES} value={category} onChange={setCategory} />
+        <SegmentedControl options={CATEGORIES} value={category} onChange={setCategory} equalWidth />
         {loading || isLoading ? (
           <ListSkeleton count={6} />
         ) : filtered.length === 0 ? (

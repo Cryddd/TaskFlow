@@ -112,7 +112,7 @@ export default function TasksScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Category segmented control */}
         <View style={styles.padH}>
-          <SegmentedControl options={CATEGORIES} value={category} onChange={setCategory} />
+          <SegmentedControl options={CATEGORIES} value={category} onChange={setCategory} equalWidth />
         </View>
 
         {/* Filter chips */}

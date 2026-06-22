@@ -40,12 +40,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray[100],
     borderRadius: radius.pill,
     padding: 3,
+    overflow: 'hidden',
   },
   equalContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
   },
   scroll: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 2,
   },
   pill: {
@@ -56,9 +59,11 @@ const styles = StyleSheet.create({
   },
   equalPill: {
     flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 7,
   },
   activePill: {
     backgroundColor: colors.primary[500],
