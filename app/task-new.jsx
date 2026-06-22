@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Switch,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -23,6 +24,12 @@ import {
 } from '../lib/taskSuggestions';
 import PrimaryButton from '../components/ui/PrimaryButton';
 import SegmentedControl from '../components/ui/SegmentedControl';
+import MonthCalendarPicker from '../components/ui/MonthCalendarPicker';
+
+const SUBTASK_MODES = [
+  { label: 'Custom', value: 'manual' },
+  { label: 'Suggestions', value: 'suggestions' },
+];
 
 const CATEGORIES = [
   { label: 'Work',     value: 'work'     },
@@ -45,6 +52,25 @@ const DIFFICULTIES = [
 
 const fmt = (d) => d.toISOString().split('T')[0];
 
+const parseReminderTime = (timeStr) => {
+  const d = new Date();
+  if (!timeStr) {
+    d.setHours(9, 0, 0, 0);
+    return d;
+  }
+  const [h, m] = timeStr.split(':').map(Number);
+  d.setHours(h || 9, m || 0, 0, 0);
+  return d;
+};
+
+const formatDisplayDate = (dateStr) => {
+  const d = new Date(`${dateStr}T12:00:00`);
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+};
+
+const formatReminderTime = (d) =>
+  `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
 export default function TaskNewScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
@@ -62,17 +88,55 @@ export default function TaskNewScreen() {
   const [tags, setTags] = useState(existing?.tags ?? []);
   const [newTag, setNewTag] = useState('');
   const [dueDate, setDueDate] = useState(existing?.dueDate ?? fmt(new Date()));
-  const [remind, setRemind] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [remind, setRemind] = useState(existing?.reminderEnabled ?? false);
+  const [reminderTime, setReminderTime] = useState(() => parseReminderTime(existing?.reminderTime));
+  const [showReminderPicker, setShowReminderPicker] = useState(false);
   const [subtasks, setSubtasks] = useState(existing?.subtasks ?? []);
+  const [subtaskMode, setSubtaskMode] = useState(
+    existing?.subtasks?.length ? 'manual' : 'manual'
+  );
   const [newSubtask, setNewSubtask] = useState('');
   const [loading, setLoading] = useState(false);
+  const [hydrated, setHydrated] = useState(!id);
 
   const titleRef = useRef(null);
 
+  useEffect(() => {
+    if (!id || !existing || hydrated) return;
+    setTitle(existing.title ?? '');
+    setDescription(existing.description ?? '');
+    setCategory(existing.category ?? 'work');
+    setPriority(existing.priority ?? 'medium');
+    setDifficulty(existing.difficulty ?? 'regular');
+    setTags(existing.tags ?? []);
+    setDueDate(existing.dueDate ?? fmt(new Date()));
+    setRemind(existing.reminderEnabled ?? false);
+    setReminderTime(parseReminderTime(existing.reminderTime));
+    setSubtasks(existing.subtasks ?? []);
+    setSubtaskMode(existing.subtasks?.length ? 'manual' : 'manual');
+    setHydrated(true);
+  }, [id, existing, hydrated]);
+
   const handleSave = () => {
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      showToast.saveFailed('Add a task title to continue');
+      titleRef.current?.focus();
+      return;
+    }
     setLoading(true);
-    const payload = { title: title.trim(), description, category, priority, difficulty, tags, dueDate, subtasks };
+    const payload = {
+      title: title.trim(),
+      description,
+      category,
+      priority,
+      difficulty,
+      tags,
+      dueDate,
+      subtasks,
+      reminderEnabled: remind,
+      reminderTime: remind ? formatReminderTime(reminderTime) : null,
+    };
     if (existing) {
       updateTaskMut.mutate(
         { id: existing.id, updates: payload },
@@ -82,7 +146,10 @@ export default function TaskNewScreen() {
             setLoading(false);
             router.back();
           },
-          onError: () => setLoading(false),
+          onError: () => {
+            setLoading(false);
+            showToast.saveFailed();
+          },
         }
       );
     } else {
@@ -94,7 +161,10 @@ export default function TaskNewScreen() {
             setLoading(false);
             router.back();
           },
-          onError: () => setLoading(false),
+          onError: () => {
+            setLoading(false);
+            showToast.saveFailed();
+          },
         }
       );
     }
@@ -148,7 +218,10 @@ export default function TaskNewScreen() {
     const trimmed = titleText.trim();
     if (!trimmed) return;
     const exists = subtasks.some((s) => s.title.toLowerCase() === trimmed.toLowerCase());
-    if (exists) return;
+    if (exists) {
+      showToast.saveFailed('That step is already on your checklist');
+      return;
+    }
     setSubtasks([
       ...subtasks,
       { id: `st${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, title: trimmed, completed: false },
@@ -177,6 +250,11 @@ export default function TaskNewScreen() {
 
   const removeSubtask = (stId) => setSubtasks(subtasks.filter((s) => s.id !== stId));
 
+  const hasSubtaskSuggestions =
+    subtaskSuggestions.templates.length > 0 || subtaskSuggestions.quickAdds.length > 0;
+  const showSuggestionPanel = subtaskMode === 'suggestions';
+  const showManualPanel = subtaskMode === 'manual';
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
@@ -200,7 +278,12 @@ export default function TaskNewScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Category */}
           <View style={styles.field}>
-            <SegmentedControl options={CATEGORIES} value={category} onChange={setCategory} />
+            <SegmentedControl
+              options={CATEGORIES}
+              value={category}
+              onChange={setCategory}
+              equalWidth
+            />
           </View>
 
           {/* Title */}
@@ -236,13 +319,35 @@ export default function TaskNewScreen() {
           <View style={styles.divider} />
 
           {/* Due Date */}
-          <View style={styles.rowField}>
+          <TouchableOpacity
+            style={styles.rowField}
+            onPress={() => setShowDatePicker((v) => !v)}
+            activeOpacity={0.7}
+          >
             <View style={styles.rowLabelWrap}>
               <MaterialIcons name="event" size={18} color={colors.gray[900]} />
               <Text style={styles.rowLabel}>Due Date</Text>
             </View>
-            <Text style={styles.rowValue}>{dueDate}</Text>
-          </View>
+            <View style={styles.rowValueWrap}>
+              <Text style={styles.rowValue}>{formatDisplayDate(dueDate)}</Text>
+              <MaterialIcons
+                name={showDatePicker ? 'expand-less' : 'expand-more'}
+                size={18}
+                color={colors.gray[400]}
+              />
+            </View>
+          </TouchableOpacity>
+          {showDatePicker && (
+            <View style={styles.datePickerWrap}>
+              <MonthCalendarPicker
+                selectedDate={dueDate}
+                onSelectDate={(d) => {
+                  setDueDate(d);
+                  setShowDatePicker(false);
+                }}
+              />
+            </View>
+          )}
 
           <View style={styles.divider} />
 
@@ -365,128 +470,228 @@ export default function TaskNewScreen() {
           <View style={styles.divider} />
 
           {/* Reminder */}
-          <View style={styles.rowField}>
-            <View style={styles.rowLabelWrap}>
-              <MaterialIcons name="alarm" size={18} color={colors.gray[900]} />
-              <Text style={styles.rowLabel}>Remind me</Text>
+          <View style={styles.reminderBlock}>
+            <View style={styles.rowField}>
+              <View style={styles.rowLabelWrap}>
+                <MaterialIcons name="alarm" size={18} color={colors.gray[900]} />
+                <Text style={styles.rowLabel}>Remind me</Text>
+              </View>
+              <Switch
+                value={remind}
+                onValueChange={(v) => {
+                  setRemind(v);
+                  if (!v) setShowReminderPicker(false);
+                }}
+                trackColor={{ false: colors.gray[200], true: colors.primary[400] }}
+                thumbColor={remind ? colors.primary[500] : '#FFFFFF'}
+              />
             </View>
-            <Switch
-              value={remind}
-              onValueChange={setRemind}
-              trackColor={{ false: colors.gray[200], true: colors.primary[400] }}
-              thumbColor={remind ? colors.primary[500] : '#FFFFFF'}
-            />
+            {remind && (
+              <TouchableOpacity
+                style={styles.reminderTimeRow}
+                onPress={() => setShowReminderPicker(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.reminderTimeLabel}>Reminder time</Text>
+                <Text style={styles.reminderTimeValue}>{formatReminderTime(reminderTime)}</Text>
+              </TouchableOpacity>
+            )}
+            {showReminderPicker && remind && (
+              <DateTimePicker
+                value={reminderTime}
+                mode="time"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(_, selected) => {
+                  if (Platform.OS !== 'ios') setShowReminderPicker(false);
+                  if (selected) setReminderTime(selected);
+                }}
+              />
+            )}
           </View>
 
           <View style={styles.divider} />
 
           {/* Subtasks */}
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Subtasks</Text>
-
-            {subtaskSuggestions.templates.length > 0 && (
-              <View style={styles.suggestionBlock}>
-                <Text style={styles.suggestionGroupLabel}>
-                  {title.trim() ? 'Checklists matched to your task' : 'Start with a checklist'}
+            <View style={styles.subtaskHeader}>
+              <Text style={styles.fieldLabel}>Subtasks</Text>
+              {subtasks.length > 0 && (
+                <Text style={styles.subtaskCount}>
+                  {subtasks.filter((s) => s.completed).length}/{subtasks.length} done
                 </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.templateCardRow}
-                  keyboardShouldPersistTaps="handled"
-                >
-                  {subtaskSuggestions.templates.map((tpl) => (
-                    <View key={tpl.id} style={styles.templateCard}>
-                      <View style={styles.templateCardHeader}>
-                        <View style={styles.templateIconWrap}>
-                          <MaterialIcons name={tpl.icon} size={18} color={colors.primary[600]} />
-                        </View>
-                        <Text style={styles.templateCardTitle} numberOfLines={1}>{tpl.label}</Text>
-                      </View>
-                      <Text style={styles.templateCardMeta}>
-                        {tpl.remainingSteps.length} step{tpl.remainingSteps.length === 1 ? '' : 's'}
-                      </Text>
-                      <View style={styles.templatePreview}>
-                        {tpl.remainingSteps.slice(0, 3).map((step) => (
-                          <Text key={step} style={styles.templatePreviewStep} numberOfLines={1}>
-                            • {step}
-                          </Text>
-                        ))}
-                        {tpl.remainingSteps.length > 3 && (
-                          <Text style={styles.templatePreviewMore}>
-                            +{tpl.remainingSteps.length - 3} more
-                          </Text>
-                        )}
-                      </View>
-                      <TouchableOpacity
-                        style={styles.templateAddBtn}
-                        onPress={() => addSubtaskTemplate(tpl.remainingSteps)}
-                        activeOpacity={0.7}
-                      >
-                        <MaterialIcons name="playlist-add" size={16} color={colors.primary[500]} />
-                        <Text style={styles.templateAddBtnText}>Add all</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            {subtaskSuggestions.quickAdds.length > 0 && (
-              <View style={styles.suggestionBlock}>
-                <Text style={styles.suggestionGroupLabel}>Suggested steps</Text>
-                <View style={styles.quickAddWrap}>
-                  {subtaskSuggestions.quickAdds.map((item) => (
-                    <TouchableOpacity
-                      key={item.title}
-                      style={styles.quickAddChip}
-                      onPress={() => addSubtaskTitle(item.title)}
-                      activeOpacity={0.7}
-                    >
-                      <MaterialIcons name="add-circle-outline" size={14} color={colors.primary[500]} />
-                      <Text style={styles.quickAddText}>{item.title}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {subtasks.map((s) => (
-              <View key={s.id} style={styles.subtaskRow}>
-                <TouchableOpacity
-                  style={[styles.subtaskCircle, s.completed && styles.subtaskCircleDone]}
-                  onPress={() => toggleSubtask(s.id)}
-                >
-                  {s.completed && (
-                    <MaterialIcons name="check-circle" size={14} color={colors.primary[500]} />
-                  )}
-                </TouchableOpacity>
-                <Text style={[styles.subtaskTitle, s.completed && styles.subtaskTitleDone]}>{s.title}</Text>
-                <TouchableOpacity onPress={() => removeSubtask(s.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <MaterialIcons name="delete" size={14} color={colors.gray[400]} />
-                </TouchableOpacity>
-              </View>
-            ))}
-            <View style={styles.subtaskAddRow}>
-              <TextInput
-                style={styles.subtaskInput}
-                placeholder="+ Add subtask"
-                placeholderTextColor={colors.gray[400]}
-                value={newSubtask}
-                onChangeText={setNewSubtask}
-                onSubmitEditing={addSubtask}
-                blurOnSubmit={false}
-                returnKeyType="done"
-              />
+              )}
             </View>
 
-            {newSubtask.trim() && (
-              <TouchableOpacity style={styles.customAddRow} onPress={addSubtask} activeOpacity={0.7}>
-                <MaterialIcons name="checklist" size={16} color={colors.primary[500]} />
-                <Text style={styles.customAddText}>
-                  Add custom step: <Text style={styles.customAddHighlight}>{newSubtask.trim()}</Text>
+            <SegmentedControl
+              options={SUBTASK_MODES}
+              value={subtaskMode}
+              onChange={setSubtaskMode}
+              equalWidth
+              style={styles.subtaskModeControl}
+            />
+
+            {showManualPanel && (
+              <View style={styles.manualChecklistBlock}>
+                <Text style={styles.manualHint}>
+                  Build your own checklist — add steps one at a time.
                 </Text>
-              </TouchableOpacity>
+
+                {subtasks.length === 0 && (
+                  <View style={styles.emptyChecklist}>
+                    <MaterialIcons name="checklist-rtl" size={28} color={colors.gray[200]} />
+                    <Text style={styles.emptyChecklistText}>No steps yet</Text>
+                    <Text style={styles.emptyChecklistSub}>
+                      Type below and press return to add each step
+                    </Text>
+                  </View>
+                )}
+
+                {subtasks.map((s) => (
+                  <View key={s.id} style={styles.subtaskRow}>
+                    <TouchableOpacity
+                      style={[styles.subtaskCircle, s.completed && styles.subtaskCircleDone]}
+                      onPress={() => toggleSubtask(s.id)}
+                    >
+                      {s.completed && (
+                        <MaterialIcons name="check-circle" size={14} color={colors.primary[500]} />
+                      )}
+                    </TouchableOpacity>
+                    <Text style={[styles.subtaskTitle, s.completed && styles.subtaskTitleDone]}>{s.title}</Text>
+                    <TouchableOpacity onPress={() => removeSubtask(s.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <MaterialIcons name="close" size={16} color={colors.gray[400]} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                <View style={styles.manualInputCard}>
+                  <MaterialIcons name="add" size={20} color={colors.primary[500]} />
+                  <TextInput
+                    style={styles.manualSubtaskInput}
+                    placeholder="Add a step…"
+                    placeholderTextColor={colors.gray[400]}
+                    value={newSubtask}
+                    onChangeText={setNewSubtask}
+                    onSubmitEditing={addSubtask}
+                    blurOnSubmit={false}
+                    returnKeyType="done"
+                  />
+                </View>
+
+                {newSubtask.trim() && (
+                  <TouchableOpacity style={styles.customAddRow} onPress={addSubtask} activeOpacity={0.7}>
+                    <MaterialIcons name="checklist" size={16} color={colors.primary[500]} />
+                    <Text style={styles.customAddText}>
+                      Add step: <Text style={styles.customAddHighlight}>{newSubtask.trim()}</Text>
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {showSuggestionPanel && (
+              <View style={styles.suggestionPanel}>
+                {!title.trim() && !hasSubtaskSuggestions && (
+                  <View style={styles.suggestionEmpty}>
+                    <MaterialIcons name="auto-awesome" size={24} color={colors.gray[200]} />
+                    <Text style={styles.suggestionEmptyText}>
+                      Write a task title first — we'll suggest relevant checklists and steps.
+                    </Text>
+                  </View>
+                )}
+
+                {subtaskSuggestions.templates.length > 0 && (
+                  <View style={styles.suggestionBlock}>
+                    <Text style={styles.suggestionGroupLabel}>Matched checklists</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.templateCardRow}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {subtaskSuggestions.templates.map((tpl) => (
+                        <View key={tpl.id} style={styles.templateCard}>
+                          <View style={styles.templateCardHeader}>
+                            <View style={styles.templateIconWrap}>
+                              <MaterialIcons name={tpl.icon} size={18} color={colors.primary[600]} />
+                            </View>
+                            <Text style={styles.templateCardTitle} numberOfLines={1}>{tpl.label}</Text>
+                          </View>
+                          <Text style={styles.templateCardMeta}>
+                            {tpl.remainingSteps.length} step{tpl.remainingSteps.length === 1 ? '' : 's'}
+                          </Text>
+                          <View style={styles.templatePreview}>
+                            {tpl.remainingSteps.slice(0, 3).map((step) => (
+                              <Text key={step} style={styles.templatePreviewStep} numberOfLines={1}>
+                                • {step}
+                              </Text>
+                            ))}
+                            {tpl.remainingSteps.length > 3 && (
+                              <Text style={styles.templatePreviewMore}>
+                                +{tpl.remainingSteps.length - 3} more
+                              </Text>
+                            )}
+                          </View>
+                          <TouchableOpacity
+                            style={styles.templateAddBtn}
+                            onPress={() => {
+                              addSubtaskTemplate(tpl.remainingSteps);
+                              setSubtaskMode('manual');
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <MaterialIcons name="playlist-add" size={16} color={colors.primary[500]} />
+                            <Text style={styles.templateAddBtnText}>Add all</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {subtaskSuggestions.quickAdds.length > 0 && (
+                  <View style={styles.suggestionBlock}>
+                    <Text style={styles.suggestionGroupLabel}>Suggested steps</Text>
+                    <View style={styles.quickAddWrap}>
+                      {subtaskSuggestions.quickAdds.map((item) => (
+                        <TouchableOpacity
+                          key={item.title}
+                          style={styles.quickAddChip}
+                          onPress={() => {
+                            addSubtaskTitle(item.title);
+                            setSubtaskMode('manual');
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialIcons name="add-circle-outline" size={14} color={colors.primary[500]} />
+                          <Text style={styles.quickAddText}>{item.title}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {subtasks.length > 0 && (
+                  <View style={styles.addedStepsPreview}>
+                    <Text style={styles.suggestionGroupLabel}>
+                      Added to checklist ({subtasks.length})
+                    </Text>
+                    {subtasks.map((s) => (
+                      <View key={s.id} style={styles.subtaskRowCompact}>
+                        <MaterialIcons name="check-circle-outline" size={14} color={colors.primary[400]} />
+                        <Text style={styles.subtaskTitleCompact} numberOfLines={1}>{s.title}</Text>
+                      </View>
+                    ))}
+                    <TouchableOpacity
+                      style={styles.switchToManualBtn}
+                      onPress={() => setSubtaskMode('manual')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.switchToManualText}>Edit checklist</Text>
+                      <MaterialIcons name="arrow-forward" size={14} color={colors.primary[500]} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
             )}
           </View>
 
@@ -579,8 +784,40 @@ const styles = StyleSheet.create({
   },
   rowValue: {
     fontSize: 15,
+    fontFamily: fonts.medium,
+    color: colors.primary[600],
+    lineHeight: 22,
+  },
+  rowValueWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  datePickerWrap: {
+    paddingHorizontal: spacing.screenH,
+    paddingBottom: 12,
+  },
+  reminderBlock: {
+    borderBottomWidth: 0,
+  },
+  reminderTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.screenH,
+    paddingBottom: 14,
+    marginTop: -4,
+  },
+  reminderTimeLabel: {
+    fontSize: 13,
     fontFamily: fonts.regular,
     color: colors.gray[400],
+    lineHeight: 18,
+  },
+  reminderTimeValue: {
+    fontSize: 15,
+    fontFamily: fonts.semibold,
+    color: colors.primary[500],
     lineHeight: 22,
   },
   fieldLabel: {
@@ -588,7 +825,125 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     color: colors.gray[600],
     lineHeight: 18,
+    marginBottom: 0,
+  },
+  subtaskHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  subtaskCount: {
+    fontSize: 12,
+    fontFamily: fonts.medium,
+    color: colors.gray[400],
+    lineHeight: 16,
+  },
+  subtaskModeControl: {
+    marginBottom: 14,
+  },
+  manualChecklistBlock: {
+    gap: 4,
+  },
+  manualHint: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: colors.gray[400],
+    lineHeight: 18,
     marginBottom: 8,
+  },
+  emptyChecklist: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 4,
+    backgroundColor: colors.gray[25],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.gray[100],
+    borderStyle: 'dashed',
+    marginBottom: 8,
+  },
+  emptyChecklistText: {
+    fontSize: 14,
+    fontFamily: fonts.semibold,
+    color: colors.gray[400],
+    lineHeight: 20,
+  },
+  emptyChecklistSub: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: colors.gray[400],
+    lineHeight: 16,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
+  manualInputCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: colors.gray[25],
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.primary[100],
+  },
+  manualSubtaskInput: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: fonts.regular,
+    color: colors.gray[900],
+    lineHeight: 22,
+  },
+  suggestionPanel: {
+    gap: 4,
+  },
+  suggestionEmpty: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 8,
+    backgroundColor: colors.gray[25],
+    borderRadius: radius.lg,
+    paddingHorizontal: 20,
+  },
+  suggestionEmptyText: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: colors.gray[400],
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  addedStepsPreview: {
+    marginTop: 12,
+    gap: 6,
+  },
+  subtaskRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  subtaskTitleCompact: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: colors.gray[600],
+    lineHeight: 18,
+  },
+  switchToManualBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+  },
+  switchToManualText: {
+    fontSize: 13,
+    fontFamily: fonts.semibold,
+    color: colors.primary[500],
+    lineHeight: 18,
   },
   pillRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   priorityPill: {

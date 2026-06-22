@@ -147,7 +147,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Smart Suggestions */}
-        {suggested.length >= 3 && (
+        {suggested.length >= 1 && (
           <View style={styles.section}>
             <View style={styles.suggestionCard}>
               <View style={styles.suggestionHeaderRow}>
