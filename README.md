@@ -5,7 +5,7 @@
 <h1 align="center">TaskFlow</h1>
 
 <p align="center">
-  <strong>Your life, organized — one beautiful screen at a time.</strong>
+  <strong>Your life, organized — </strong>
 </p>
 
 <p align="center">

@@ -1,44 +1,43 @@
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Tabs, useRouter, Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { TouchableOpacity } from 'react-native';
 import FABMenu from '../../components/ui/FABMenu';
 import { useAuth } from '../../lib/AuthContext';
-import { colors, fonts } from '../../lib/theme';
+import { colors, brand, shadows } from '../../lib/theme';
 
-const TAB_BAR_HEIGHT = 60;
-
-const LEFT_TABS = [
-  { name: 'index',    label: 'Home',  icon: 'home'      },
-  { name: 'tasks',    label: 'Tasks', icon: 'check-box' },
+// Floating pill nav — Home · Calendar · Tasks · Profile.
+// Add happens via the warm sand FAB (quick-capture menu).
+const NAV_TABS = [
+  { name: 'index',    icon: 'home',            label: 'Home'     },
+  { name: 'calendar', icon: 'calendar-today',  label: 'Calendar' },
+  { name: 'tasks',    icon: 'checklist',       label: 'Tasks'    },
+  { name: 'profile',  icon: 'person-outline',  label: 'Profile'  },
 ];
 
-const RIGHT_TABS = [
-  { name: 'discover', label: 'Discover', icon: 'explore' },
-  { name: 'profile',  label: 'Profile',  icon: 'person'  },
-];
-
-function TabButton({ tab, isFocused, onPress }) {
+function PillTab({ tab, isFocused, onPress }) {
   return (
     <TouchableOpacity
-      style={styles.tab}
+      style={styles.pillTab}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={tab.label}
+      accessibilityState={{ selected: isFocused }}
     >
-      {isFocused && <View style={styles.indicator} />}
-      <MaterialIcons
-        name={tab.icon}
-        size={24}
-        color={isFocused ? colors.primary[500] : colors.gray[400]}
-      />
-      <Text style={[styles.label, isFocused && styles.activeLabel]}>
-        {tab.label}
-      </Text>
+      <View style={[styles.iconWrap, isFocused && styles.iconWrapActive]}>
+        <MaterialIcons
+          name={tab.icon}
+          size={22}
+          color={isFocused ? brand.ink : '#9FB0DC'}
+        />
+      </View>
     </TouchableOpacity>
   );
 }
 
-function CustomTabBar({ state, navigation }) {
+function FloatingTabBar({ state, navigation }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -48,29 +47,23 @@ function CustomTabBar({ state, navigation }) {
   };
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
-      <View style={styles.tabRow}>
-        {LEFT_TABS.map((tab) => (
-          <TabButton
+    <View
+      style={[styles.dock, { paddingBottom: Math.max(insets.bottom, 14) }]}
+      pointerEvents="box-none"
+    >
+      <View style={styles.pill}>
+        {NAV_TABS.map((tab) => (
+          <PillTab
             key={tab.name}
             tab={tab}
             isFocused={isFocused(tab.name)}
             onPress={() => navigation.navigate(tab.name)}
           />
         ))}
+      </View>
 
-        <View style={styles.fabSlot}>
-          <FABMenu variant="tab" onNavigate={(path) => router.push(path)} />
-        </View>
-
-        {RIGHT_TABS.map((tab) => (
-          <TabButton
-            key={tab.name}
-            tab={tab}
-            isFocused={isFocused(tab.name)}
-            onPress={() => navigation.navigate(tab.name)}
-          />
-        ))}
+      <View style={styles.fabSlot}>
+        <FABMenu variant="tab" onNavigate={(path) => router.push(path)} />
       </View>
     </View>
   );
@@ -81,7 +74,7 @@ export default function TabLayout() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg.app }}>
+      <View style={styles.loader}>
         <ActivityIndicator size="large" color={colors.primary[500]} />
       </View>
     );
@@ -94,14 +87,14 @@ export default function TabLayout() {
   return (
     <View style={styles.wrapper}>
       <Tabs
-        tabBar={(props) => <CustomTabBar {...props} />}
-        screenOptions={{ headerShown: false }}
+        tabBar={(props) => <FloatingTabBar {...props} />}
+        screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.bg.app } }}
       >
         <Tabs.Screen name="index"    options={{ title: 'Home'     }} />
+        <Tabs.Screen name="calendar" options={{ title: 'Calendar' }} />
         <Tabs.Screen name="tasks"    options={{ title: 'Tasks'    }} />
-        <Tabs.Screen name="discover" options={{ title: 'Discover' }} />
         <Tabs.Screen name="profile"  options={{ title: 'Profile'  }} />
-        <Tabs.Screen name="calendar" options={{ href: null }} />
+        <Tabs.Screen name="discover" options={{ href: null }} />
       </Tabs>
     </View>
   );
@@ -110,49 +103,50 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
+    backgroundColor: colors.bg.app,
   },
-  container: {
-    backgroundColor: colors.bg.elevated,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
-  },
-  tabRow: {
-    flexDirection: 'row',
-    height: TAB_BAR_HEIGHT,
-    alignItems: 'flex-end',
-  },
-  tab: {
+  loader: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    paddingTop: 4,
-    paddingBottom: 6,
+    backgroundColor: colors.bg.app,
+  },
+  dock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: brand.ink,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 2,
+    ...shadows.floating,
+  },
+  pillTab: {
+    paddingHorizontal: 4,
+  },
+  iconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconWrapActive: {
+    backgroundColor: brand.canvas,
   },
   fabSlot: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 4,
-  },
-  indicator: {
-    position: 'absolute',
-    top: 0,
-    left: '20%',
-    right: '20%',
-    height: 2,
-    backgroundColor: colors.primary[500],
-    borderRadius: 1,
-  },
-  label: {
-    fontSize: 10,
-    fontFamily: fonts.medium,
-    color: colors.gray[400],
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    lineHeight: 14,
-  },
-  activeLabel: {
-    color: colors.primary[500],
+    justifyContent: 'center',
   },
 });

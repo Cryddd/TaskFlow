@@ -6,71 +6,90 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { TapGestureHandler, State } from 'react-native-gesture-handler';
+import Svg, { Circle } from 'react-native-svg';
 import { useStore } from '../../lib/store';
 import { useTasks, useToggleTask, useDeleteTask, getSuggestedTasks, getDailyStats, getOverdueCount } from '../../lib/hooks/useTasks';
-import { useHabits } from '../../lib/hooks/useHabits';
+import { useHabits, useToggleHabit } from '../../lib/hooks/useHabits';
 import { useNotes } from '../../lib/hooks/useNotes';
 import { useGoals } from '../../lib/hooks/useGoals';
 import { useProfile } from '../../lib/hooks/useProfile';
-import { colors, fonts, spacing, radius, shadows } from '../../lib/theme';
-import {
-  handleTaskToggle,
-  handleTaskDelete,
-} from '../../lib/taskHandlers';
+import { colors, brand, fonts, spacing, radius, shadows } from '../../lib/theme';
+import { handleTaskToggle, handleTaskDelete } from '../../lib/taskHandlers';
 import { showToast } from '../../lib/toast';
-import DailyCommandCenter from '../../components/ui/DailyCommandCenter';
-import HabitRing from '../../components/ui/HabitRing';
+import GradientMesh from '../../components/ui/GradientMesh';
+import HabitCard from '../../components/ui/HabitCard';
 import TaskItem from '../../components/ui/TaskItem';
 import SectionHeader from '../../components/ui/SectionHeader';
 import WeekStrip from '../../components/ui/WeekStrip';
 import MonthCalendarPicker from '../../components/ui/MonthCalendarPicker';
 import NoteCard from '../../components/ui/NoteCard';
 
-const fmt = (d) => d.toISOString().split('T')[0];
+const CHIPS = [
+  { key: 'today',  label: 'Today',  icon: 'wb-sunny',     route: null },
+  { key: 'tasks',  label: 'Tasks',  icon: 'checklist',    route: '/(tabs)/tasks' },
+  { key: 'habits', label: 'Habits', icon: 'local-fire-department', route: '/see-all-habits' },
+  { key: 'meals',  label: 'Meals',  icon: 'restaurant',   route: '/nutrition' },
+];
+
+function greetingFor(date = new Date()) {
+  const h = date.getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+const RING_R = 32;
+const RING_CIRC = 2 * Math.PI * RING_R;
+
+function heroState(remainingTasks, overallPct) {
+  if (overallPct >= 100 || remainingTasks === 0) {
+    return { eyebrow: 'ALL DONE', title: "You're all caught up", sub: 'Nothing left today — nice work.' };
+  }
+  const eyebrow = remainingTasks <= 2 ? 'LIGHT WORKLOAD' : remainingTasks <= 5 ? 'BALANCED WORKLOAD' : 'BUSY DAY';
+  return {
+    eyebrow,
+    title: 'Keep your day on track',
+    sub: `${remainingTasks} task${remainingTasks === 1 ? '' : 's'} remaining today`,
+  };
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const { selectedDate, setSelectedDate } = useStore();
-  const { data: tasks = [], refetch: refetchTasks, isLoading: tasksLoading } = useTasks();
+  const { data: tasks = [], refetch: refetchTasks } = useTasks();
   const { data: habits = [], refetch: refetchHabits } = useHabits();
   const { data: notes = [], refetch: refetchNotes } = useNotes();
   const { data: goals = [] } = useGoals();
   const { data: profile } = useProfile();
   const toggleTaskMut = useToggleTask();
   const deleteTaskMut = useDeleteTask();
+  const toggleHabitMut = useToggleHabit();
   const [refreshing, setRefreshing] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
-  const scrollY = useRef(new Animated.Value(0)).current;
 
   const toggleCalendar = () => setShowCalendar((prev) => !prev);
-
   const onDateSectionDoubleTap = ({ nativeEvent }) => {
-    if (nativeEvent.state === State.ACTIVE) {
-      toggleCalendar();
-    }
+    if (nativeEvent.state === State.ACTIVE) toggleCalendar();
   };
 
   useEffect(() => {
     const overdueCount = getOverdueCount(tasks);
-    if (overdueCount > 0) {
-      showToast.overdueReminder(overdueCount);
-    }
+    if (overdueCount > 0) showToast.overdueReminder(overdueCount);
   }, []);
 
   const onToggleTask = (id) => handleTaskToggle(tasks, id, () => toggleTaskMut.mutate(id));
   const onDeleteTask = (id) => handleTaskDelete(id, () => deleteTaskMut.mutate(id));
+  const onToggleHabit = (id) => toggleHabitMut.mutate(id);
   const goToTask = (task) => router.push(`/task/${task.id}`);
   const goToHabit = (habitId) => router.push(`/habit/${habitId}`);
 
   const stats = getDailyStats(tasks, habits, goals, selectedDate);
-  const suggested = getSuggestedTasks(tasks, selectedDate);
 
   const todayTasks = tasks.filter((t) => t.dueDate === selectedDate);
   const inProgress = todayTasks.filter((t) => t.status === 'in_progress' && !t.completed);
@@ -82,45 +101,115 @@ export default function HomeScreen() {
     return acc;
   }, {});
 
-  const headerOpacity = scrollY.interpolate({ inputRange: [0, 60], outputRange: [1, 0.92], extrapolate: 'clamp' });
-  const headerHeight = scrollY.interpolate({ inputRange: [0, 60], outputRange: [56, 48], extrapolate: 'clamp' });
-
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([refetchTasks(), refetchHabits(), refetchNotes()]);
     setRefreshing(false);
   };
 
-  const today = new Date();
-  const displayDate = selectedDate ? new Date(selectedDate + 'T00:00:00') : today;
-  const monthYear = displayDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const remainingTasks = Math.max(0, stats.tasks.total - stats.tasks.completed);
+  const hero = heroState(remainingTasks, stats.overallPct);
+  const ringOffset = RING_CIRC * (1 - Math.min(100, Math.max(0, stats.overallPct)) / 100);
+  const firstName = (profile?.fullName || '').split(' ')[0] || 'there';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Top Bar */}
-      <Animated.View style={[styles.topBar, { height: headerHeight, opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <MaterialIcons name="menu" size={24} color={colors.gray[900]} />
-        </TouchableOpacity>
-        <Text style={styles.monthLabel}>{monthYear}</Text>
-        <View style={styles.topRight}>
-          <TouchableOpacity style={styles.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <MaterialIcons name="search" size={22} color={colors.gray[900]} />
-          </TouchableOpacity>
+      {/* Greeting header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{profile?.initials ?? '?'}</Text>
           </View>
+          <View>
+            <Text style={styles.greeting}>{greetingFor()},</Text>
+            <Text style={styles.name} numberOfLines={1}>{profile?.fullName || firstName}</Text>
+          </View>
         </View>
-      </Animated.View>
+        <TouchableOpacity style={styles.bellBtn} hitSlop={8}>
+          <MaterialIcons name="notifications-none" size={20} color={brand.ink} />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.headerRule} />
 
-      <Animated.ScrollView
+      <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-        scrollEventThrottle={16}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
       >
-        {/* Week Strip / Floating Calendar */}
+        {/* Hero */}
+        <GradientMesh variant="hero" radius={radius['2xl']} style={styles.hero}>
+          <View style={styles.heroRow}>
+            <View style={styles.heroTexts}>
+              <Text style={styles.heroEyebrow}>{hero.eyebrow}</Text>
+              <Text style={styles.heroTitle}>{hero.title}</Text>
+              <Text style={styles.heroSub}>{hero.sub}</Text>
+            </View>
+            <View style={styles.heroRing}>
+              <Svg width={78} height={78}>
+                <Circle cx={39} cy={39} r={RING_R} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth={7} />
+                <Circle
+                  cx={39} cy={39} r={RING_R}
+                  fill="none"
+                  stroke={brand.powder}
+                  strokeWidth={7}
+                  strokeLinecap="round"
+                  strokeDasharray={`${RING_CIRC} ${RING_CIRC}`}
+                  strokeDashoffset={ringOffset}
+                  transform="rotate(-90, 39, 39)"
+                />
+              </Svg>
+              <View style={styles.heroRingCenter} pointerEvents="none">
+                <Text style={styles.heroRingPct}>{stats.overallPct}%</Text>
+                <Text style={styles.heroRingLabel}>done</Text>
+              </View>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.heroCta}
+            activeOpacity={0.85}
+            onPress={() => router.push('/(tabs)/tasks')}
+          >
+            <Text style={styles.heroCtaText}>View tasks</Text>
+            <MaterialIcons name="arrow-forward" size={15} color={brand.ink} />
+          </TouchableOpacity>
+        </GradientMesh>
+
+        {/* Quick capture */}
+        <TouchableOpacity
+          style={styles.capture}
+          activeOpacity={0.9}
+          onPress={() => router.push('/task-new')}
+        >
+          <MaterialIcons name="add" size={22} color={brand.ink} />
+          <Text style={styles.capturePlaceholder}>Add a task or habit…</Text>
+          <View style={styles.captureMic}>
+            <MaterialIcons name="mic-none" size={20} color="#FFF7EC" />
+          </View>
+        </TouchableOpacity>
+
+        {/* Quiet chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipRow}
+        >
+          {CHIPS.map((c) => {
+            const active = c.key === 'today';
+            return (
+              <TouchableOpacity
+                key={c.key}
+                style={[styles.chip, active && styles.chipActive]}
+                activeOpacity={0.8}
+                onPress={() => c.route && router.push(c.route)}
+              >
+                <MaterialIcons name={c.icon} size={15} color={active ? brand.canvas : colors.gray[600]} />
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{c.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Week strip / calendar (double-tap to expand) */}
         <View style={styles.section}>
           <TapGestureHandler onHandlerStateChange={onDateSectionDoubleTap} numberOfTaps={2}>
             <View>
@@ -141,190 +230,121 @@ export default function HomeScreen() {
           </TapGestureHandler>
         </View>
 
-        {/* Daily Command Center */}
-        <View style={styles.section}>
-          <DailyCommandCenter stats={stats} />
-        </View>
-
-        {/* Smart Suggestions */}
-        {suggested.length >= 1 && (
+        {/* Habits */}
+        {habits.length > 0 && (
           <View style={styles.section}>
-            <View style={styles.suggestionCard}>
-              <View style={styles.suggestionHeaderRow}>
-                <MaterialIcons name="tips-and-updates" size={18} color={colors.gray[400]} />
-                <Text style={styles.suggestionHeader}>Suggested Order</Text>
-              </View>
-              {suggested.map((t, i) => (
-                <View key={t.id} style={styles.suggestionRow}>
-                  <View style={styles.suggestionNum}>
-                    <Text style={styles.suggestionNumText}>{i + 1}</Text>
-                  </View>
-                  <Text style={styles.suggestionTitle} numberOfLines={1}>{t.title}</Text>
-                  <Text style={styles.suggestionHint}>
-                    {t.priority === 'urgent' || t.priority === 'high' ? 'High priority' : 'Quick win'}
-                  </Text>
+            <SectionHeader
+              title="Habits"
+              count={habits.length}
+              rightElement={
+                <View style={styles.headerActions}>
+                  <TouchableOpacity onPress={() => router.push('/see-all-habits')} hitSlop={8}>
+                    <Text style={styles.seeAllLink}>See all</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => router.push('/habit-new')} hitSlop={8}>
+                    <MaterialIcons name="add" size={20} color={colors.primary[500]} />
+                  </TouchableOpacity>
                 </View>
+              }
+            />
+            <View style={styles.habitList}>
+              {habits.slice(0, 4).map((h) => (
+                <HabitCard
+                  key={h.id}
+                  habit={h}
+                  onPress={goToHabit}
+                  onToggle={onToggleHabit}
+                />
               ))}
             </View>
           </View>
         )}
 
-        {/* Habits */}
+        {/* Today's Tasks */}
         <View style={styles.section}>
           <SectionHeader
-            title="Habits"
-            count={habits.length}
-            rightElement={
-              <View style={styles.headerActions}>
-                <TouchableOpacity onPress={() => router.push('/see-all-habits')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={styles.seeAllLink}>See all</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => router.push('/habit-new')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <MaterialIcons name="add" size={20} color={colors.primary[500]} />
-                </TouchableOpacity>
-              </View>
-            }
-          />
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.habitScroll}
-          >
-            {habits.map((h) => (
-              <HabitRing key={h.id} habit={h} onPress={() => goToHabit(h.id)} />
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Tasks */}
-        <View style={styles.section}>
-          <SectionHeader
-            title="Today's Tasks"
+            title="Today's tasks"
             count={todayTasks.length}
             rightElement={
-              <View style={styles.headerActions}>
-                <TouchableOpacity onPress={() => router.push('/see-all-tasks')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={styles.seeAllLink}>See all</Text>
-                </TouchableOpacity>
-                <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <MaterialIcons name="tune" size={18} color={colors.gray[400]} />
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity onPress={() => router.push('/see-all-tasks')} hitSlop={8}>
+                <Text style={styles.seeAllLink}>See all</Text>
+              </TouchableOpacity>
             }
           />
 
-          {/* In Progress */}
           {inProgress.length > 0 && (
             <View style={styles.taskGroup}>
               <Text style={styles.groupLabel}>IN PROGRESS</Text>
               <View style={styles.taskList}>
                 {inProgress.map((t) => (
-                  <TaskItem
-                    key={t.id}
-                    task={t}
-                    onToggle={onToggleTask}
-                    onDelete={onDeleteTask}
-                    onPress={goToTask}
-                  />
+                  <TaskItem key={t.id} task={t} onToggle={onToggleTask} onDelete={onDeleteTask} onPress={goToTask} />
                 ))}
               </View>
             </View>
           )}
 
-          {/* Pending */}
           {pending.length > 0 && (
             <View style={styles.taskGroup}>
               <Text style={styles.groupLabel}>PENDING</Text>
               <View style={styles.taskList}>
                 {pending.map((t) => (
-                  <TaskItem
-                    key={t.id}
-                    task={t}
-                    onToggle={onToggleTask}
-                    onDelete={onDeleteTask}
-                    onPress={goToTask}
-                  />
+                  <TaskItem key={t.id} task={t} onToggle={onToggleTask} onDelete={onDeleteTask} onPress={goToTask} />
                 ))}
               </View>
             </View>
           )}
 
-          {/* Completed (collapsed) */}
           {completed.length > 0 && (
             <View style={styles.taskGroup}>
-              <TouchableOpacity
-                style={styles.completedToggle}
-                onPress={() => setShowCompleted(!showCompleted)}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.completedToggle} onPress={() => setShowCompleted(!showCompleted)} activeOpacity={0.7}>
                 <Text style={styles.completedToggleText}>
                   {showCompleted ? 'Hide' : `Show ${completed.length} completed`}
                 </Text>
-                {showCompleted
-                  ? <MaterialIcons name="expand-less" size={18} color={colors.gray[400]} />
-                  : <MaterialIcons name="expand-more" size={18} color={colors.gray[400]} />}
+                <MaterialIcons name={showCompleted ? 'expand-less' : 'expand-more'} size={18} color={colors.gray[400]} />
               </TouchableOpacity>
               {showCompleted && (
                 <View style={styles.taskList}>
                   {completed.map((t) => (
-                    <TaskItem
-                      key={t.id}
-                      task={t}
-                      onToggle={onToggleTask}
-                      onDelete={onDeleteTask}
-                      onPress={goToTask}
-                    />
+                    <TaskItem key={t.id} task={t} onToggle={onToggleTask} onDelete={onDeleteTask} onPress={goToTask} />
                   ))}
                 </View>
               )}
             </View>
           )}
 
-          {/* Empty state */}
           {todayTasks.length === 0 && (
             <View style={styles.emptyState}>
-              <MaterialIcons name="done-all" size={48} color={colors.gray[400]} />
-              <Text style={styles.emptyTitle}>No tasks today.</Text>
-              <Text style={styles.emptySubtitle}>Add one to get started.</Text>
-              <TouchableOpacity
-                style={styles.emptyBtn}
-                onPress={() => router.push('/task-new')}
-              >
-                <Text style={styles.emptyBtnText}>Add Task</Text>
-              </TouchableOpacity>
+              <MaterialIcons name="wb-twilight" size={44} color={colors.gray[400]} />
+              <Text style={styles.emptyTitle}>Nothing due today</Text>
+              <Text style={styles.emptySubtitle}>Capture a task above to get going.</Text>
             </View>
           )}
         </View>
 
         {/* Notes */}
-        <View style={[styles.section, styles.lastSection]}>
-          <SectionHeader
-            title="Notes"
-            rightElement={
-              <View style={styles.headerActions}>
-                <TouchableOpacity onPress={() => router.push('/see-all-notes')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={styles.seeAllLink}>See all</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => router.push('/note/new')}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <MaterialIcons name="add" size={20} color={colors.primary[500]} />
-                </TouchableOpacity>
-              </View>
-            }
-          />
-          <View style={styles.notesGrid}>
-            {notes.map((note) => (
-              <NoteCard
-                key={note.id}
-                note={note}
-                onPress={() => router.push(`/note/${note.id}`)}
-              />
-            ))}
+        {notes.length > 0 && (
+          <View style={[styles.section, styles.lastSection]}>
+            <SectionHeader
+              title="Notes"
+              rightElement={
+                <View style={styles.headerActions}>
+                  <TouchableOpacity onPress={() => router.push('/see-all-notes')} hitSlop={8}>
+                    <Text style={styles.seeAllLink}>See all</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => router.push('/note/new')} hitSlop={8}>
+                    <MaterialIcons name="add" size={20} color={colors.primary[500]} />
+                  </TouchableOpacity>
+                </View>
+              }
+            />
+            <View style={styles.notesGrid}>
+              {notes.map((note) => (
+                <NoteCard key={note.id} note={note} onPress={() => router.push(`/note/${note.id}`)} />
+              ))}
+            </View>
           </View>
-        </View>
-      </Animated.ScrollView>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -334,59 +354,198 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg.app,
   },
-  topBar: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.screenH,
-    backgroundColor: colors.bg.elevated,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
+    paddingTop: 6,
+    paddingBottom: 12,
   },
-  iconBtn: {
-    padding: 4,
-  },
-  monthLabel: {
-    fontSize: 20,
-    fontFamily: fonts.bold,
-    color: colors.gray[900],
-    lineHeight: 28,
-  },
-  topRight: {
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 11,
+    flex: 1,
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primary[100],
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: brand.ink,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.primary[200],
   },
   avatarText: {
-    fontSize: 13,
-    fontFamily: fonts.bold,
-    color: colors.primary[800],
-    lineHeight: 18,
+    fontSize: 14,
+    fontFamily: fonts.semibold,
+    color: brand.canvas,
+  },
+  greeting: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: colors.gray[400],
+    lineHeight: 16,
+  },
+  name: {
+    fontSize: 16,
+    fontFamily: fonts.semibold,
+    color: brand.ink,
+    lineHeight: 22,
+  },
+  bellBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerRule: {
+    height: 1,
+    backgroundColor: colors.gray[100],
+    marginHorizontal: spacing.screenH,
   },
   scroll: {
-    paddingBottom: 40,
+    paddingBottom: 140,
+  },
+  hero: {
+    marginHorizontal: spacing.screenH,
+    marginTop: 18,
+    padding: 20,
+  },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  heroTexts: {
+    flex: 1,
+  },
+  heroEyebrow: {
+    fontSize: 11,
+    fontFamily: fonts.semibold,
+    color: brand.powder,
+    letterSpacing: 1,
+  },
+  heroTitle: {
+    fontSize: 25,
+    fontFamily: fonts.bold,
+    color: brand.canvas,
+    lineHeight: 30,
+    letterSpacing: -0.4,
+    marginTop: 8,
+  },
+  heroSub: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: '#C6CDE6',
+    lineHeight: 19,
+    marginTop: 8,
+  },
+  heroRing: {
+    width: 78,
+    height: 78,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroRingCenter: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroRingPct: {
+    fontSize: 19,
+    fontFamily: fonts.bold,
+    color: brand.canvas,
+    lineHeight: 22,
+  },
+  heroRingLabel: {
+    fontSize: 9,
+    fontFamily: fonts.regular,
+    color: '#9FB0DC',
+    lineHeight: 12,
+  },
+  heroCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    alignSelf: 'flex-start',
+    marginTop: 16,
+    backgroundColor: brand.canvas,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: radius.pill,
+  },
+  heroCtaText: {
+    fontSize: 13,
+    fontFamily: fonts.semibold,
+    color: brand.ink,
+  },
+  capture: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: spacing.screenH,
+    marginTop: 24,
+    backgroundColor: colors.bg.card,
+    borderRadius: radius.lg,
+    paddingLeft: 18,
+    paddingRight: 13,
+    paddingVertical: 13,
+    ...shadows.card,
+  },
+  capturePlaceholder: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: fonts.regular,
+    color: colors.gray[400],
+  },
+  captureMic: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: brand.sand,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: spacing.screenH,
+    paddingTop: 18,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.bg.subtle,
+    borderRadius: radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  chipActive: {
+    backgroundColor: brand.ink,
+  },
+  chipText: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+    color: colors.gray[600],
+  },
+  chipTextActive: {
+    color: brand.canvas,
   },
   section: {
     paddingHorizontal: spacing.screenH,
     marginTop: spacing.sectionGap,
   },
   lastSection: {
-    marginBottom: 24,
+    marginBottom: 12,
   },
-  habitScroll: {
-    flexDirection: 'row',
-    gap: 16,
-    paddingRight: spacing.screenH,
+  habitList: {
+    gap: 10,
   },
   headerActions: {
     flexDirection: 'row',
@@ -397,7 +556,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: fonts.medium,
     color: colors.primary[500],
-    lineHeight: 18,
   },
   taskGroup: {
     marginBottom: 12,
@@ -407,7 +565,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     color: colors.gray[400],
     letterSpacing: 0.8,
-    lineHeight: 16,
     marginBottom: 8,
   },
   taskList: {
@@ -424,58 +581,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: fonts.medium,
     color: colors.gray[400],
-    lineHeight: 18,
-  },
-  suggestionCard: {
-    backgroundColor: colors.bg.card,
-    borderRadius: radius.md,
-    padding: 16,
-    gap: 10,
-    ...shadows.card,
-  },
-  suggestionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  suggestionHeader: {
-    fontSize: 13,
-    fontFamily: fonts.medium,
-    color: colors.gray[400],
-    fontStyle: 'italic',
-    lineHeight: 18,
-  },
-  suggestionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  suggestionNum: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.primary[50],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  suggestionNumText: {
-    fontSize: 12,
-    fontFamily: fonts.bold,
-    color: colors.primary[500],
-    lineHeight: 16,
-  },
-  suggestionTitle: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: fonts.medium,
-    color: colors.gray[900],
-    lineHeight: 18,
-  },
-  suggestionHint: {
-    fontSize: 11,
-    fontFamily: fonts.regular,
-    color: colors.gray[400],
-    lineHeight: 16,
   },
   notesGrid: {
     flexDirection: 'row',
@@ -485,32 +590,17 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingVertical: 28,
     gap: 8,
   },
   emptyTitle: {
     fontSize: 17,
     fontFamily: fonts.semibold,
     color: colors.gray[600],
-    lineHeight: 24,
   },
   emptySubtitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: fonts.regular,
     color: colors.gray[400],
-    lineHeight: 22,
-  },
-  emptyBtn: {
-    marginTop: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    backgroundColor: colors.primary[500],
-    borderRadius: radius.sm,
-  },
-  emptyBtnText: {
-    fontSize: 15,
-    fontFamily: fonts.semibold,
-    color: '#FFFFFF',
-    lineHeight: 22,
   },
 });

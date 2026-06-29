@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Animated, StyleSheet, Modal, Pressable } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, fonts, radius } from '../../lib/theme';
+import { colors, fonts, radius, brand } from '../../lib/theme';
 
 const ACTIONS = [
   { key: 'task',  label: 'New Task',  icon: 'assignment-add', route: '/task-new'  },
@@ -184,9 +184,14 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   tabFab: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    marginTop: -18,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: brand.sand,
+    shadowColor: brand.sand,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 8,
   },
 });
