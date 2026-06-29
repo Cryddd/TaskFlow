@@ -18,9 +18,9 @@ const DUE_DATE_FORMAT = (dateStr) => {
 };
 
 const DUE_BADGE_STYLES = {
-  overdue: { bg: '#FEF2F2', text: '#EF4444' },
-  today:   { bg: '#FFFBEB', text: '#F59E0B' },
-  future:  { bg: colors.gray[50], text: colors.gray[400] },
+  overdue: { bg: colors.danger[50], text: '#C13338' },
+  today:   { bg: colors.accent.sand50, text: colors.accent.sand600 },
+  future:  { bg: colors.bg.subtle, text: colors.gray[400] },
 };
 
 export default function TaskItem({ task, onToggle, onDelete, onPress }) {
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   rowWrapper: {
     position: 'relative',
     backgroundColor: colors.bg.card,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     overflow: 'hidden',
     ...shadows.card,
   },

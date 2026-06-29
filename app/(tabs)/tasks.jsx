@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTasks, useCreateTask, useToggleTask, useDeleteTask } from '../../lib/hooks/useTasks';
-import { colors, fonts, spacing, radius } from '../../lib/theme';
+import { colors, brand, fonts, spacing, radius, shadows } from '../../lib/theme';
 import { handleTaskToggle, handleTaskDelete } from '../../lib/taskHandlers';
 import { showToast } from '../../lib/toast';
 import TaskItem from '../../components/ui/TaskItem';
@@ -28,9 +28,9 @@ const CATEGORIES = [
 const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3, none: 4 };
 
 const FILTER_CHIPS = [
-  { id: 'today',    label: 'Today'         },
-  { id: 'high',     label: 'High Priority' },
-  { id: 'pending',  label: 'Incomplete'    },
+  { id: 'today',    label: 'Today'      },
+  { id: 'high',     label: 'High'       },
+  { id: 'pending',  label: 'Incomplete' },
 ];
 
 export default function TasksScreen() {
@@ -46,6 +46,9 @@ export default function TasksScreen() {
 
   const fmt = (d) => d.toISOString().split('T')[0];
   const today = fmt(new Date());
+
+  const openCount = tasks.filter((t) => !t.completed).length;
+  const doneToday = tasks.filter((t) => t.completed && t.dueDate === today).length;
 
   const toggleFilter = (id) => {
     setActiveFilters((prev) =>
@@ -88,31 +91,52 @@ export default function TasksScreen() {
   const handleSort = () => {
     Alert.alert('Sort by', '', [
       { text: 'Priority', onPress: () => setSortBy('priority') },
-      { text: 'Due Date', onPress: () => setSortBy('date') },
+      { text: 'Due date', onPress: () => setSortBy('date') },
       { text: 'Title', onPress: () => setSortBy('title') },
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
 
+  const sortLabel = sortBy.charAt(0).toUpperCase() + sortBy.slice(1);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Top Bar */}
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Tasks</Text>
-        <View style={styles.actions}>
-          <TouchableOpacity style={styles.iconBtn} onPress={handleSort}>
-            <MaterialIcons name="swap-vert" size={22} color={colors.gray[900]} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => {}}>
-            <MaterialIcons name="tune" size={22} color={colors.gray[900]} />
-          </TouchableOpacity>
+        <View>
+          <Text style={styles.title}>Tasks</Text>
+          <Text style={styles.subtitle}>{openCount} open · {doneToday} done today</Text>
         </View>
+        <TouchableOpacity style={styles.iconBtn} onPress={handleSort} hitSlop={8}>
+          <MaterialIcons name="swap-vert" size={20} color={brand.ink} />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Category segmented control */}
         <View style={styles.padH}>
           <SegmentedControl options={CATEGORIES} value={category} onChange={setCategory} equalWidth />
+        </View>
+
+        {/* Quick capture */}
+        <View style={[styles.padH, styles.captureWrap]}>
+          <View style={styles.capture}>
+            <MaterialIcons name="add" size={22} color={brand.ink} />
+            <TextInput
+              style={styles.captureInput}
+              placeholder="Add a task…"
+              placeholderTextColor={colors.gray[400]}
+              value={quickAddText}
+              onChangeText={setQuickAddText}
+              onSubmitEditing={handleQuickAdd}
+              returnKeyType="done"
+            />
+            {quickAddText.length > 0 && (
+              <TouchableOpacity style={styles.captureBtn} onPress={handleQuickAdd}>
+                <MaterialIcons name="arrow-upward" size={20} color={brand.canvas} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Filter chips */}
@@ -124,31 +148,26 @@ export default function TasksScreen() {
                 key={chip.id}
                 style={[styles.chip, active && styles.activeChip]}
                 onPress={() => toggleFilter(chip.id)}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
               >
                 <Text style={[styles.chipText, active && styles.activeChipText]}>{chip.label}</Text>
-                {active && <MaterialIcons name="close" size={14} color={colors.primary[500]} />}
+                {active && <MaterialIcons name="close" size={14} color={brand.canvas} />}
               </TouchableOpacity>
             );
           })}
-        </ScrollView>
-
-        {/* Sort label */}
-        <View style={styles.padH}>
-          <TouchableOpacity onPress={handleSort} style={styles.sortRow}>
-            <Text style={styles.sortText}>
-              Sort by: {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)} ▾
-            </Text>
+          <TouchableOpacity style={styles.sortChip} onPress={handleSort} activeOpacity={0.8}>
+            <MaterialIcons name="sort" size={14} color={colors.gray[600]} />
+            <Text style={styles.sortChipText}>{sortLabel}</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
 
         {/* Task list */}
         <View style={[styles.padH, styles.taskList]}>
           {filtered.length === 0 ? (
             <View style={styles.emptyState}>
-              <MaterialIcons name="assignment" size={48} color={colors.gray[400]} />
-              <Text style={styles.emptyTitle}>No tasks found.</Text>
-              <Text style={styles.emptySubtitle}>Try adjusting filters or add a new task.</Text>
+              <MaterialIcons name="task-alt" size={44} color={colors.gray[400]} />
+              <Text style={styles.emptyTitle}>No tasks here</Text>
+              <Text style={styles.emptySubtitle}>Add one above or adjust your filters.</Text>
             </View>
           ) : (
             filtered.map((task) => (
@@ -160,24 +179,6 @@ export default function TasksScreen() {
                 onPress={(task) => router.push(`/task/${task.id}`)}
               />
             ))
-          )}
-        </View>
-
-        {/* Quick Add */}
-        <View style={[styles.padH, styles.quickAddRow]}>
-          <TextInput
-            style={styles.quickAddInput}
-            placeholder="+ Add task…"
-            placeholderTextColor={colors.gray[400]}
-            value={quickAddText}
-            onChangeText={setQuickAddText}
-            onSubmitEditing={handleQuickAdd}
-            returnKeyType="done"
-          />
-          {quickAddText.length > 0 && (
-            <TouchableOpacity style={styles.quickAddBtn} onPress={handleQuickAdd}>
-              <MaterialIcons name="add" size={18} color={colors.gray[0]} />
-            </TouchableOpacity>
           )}
         </View>
       </ScrollView>
@@ -192,23 +193,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.screenH,
-    paddingTop: 16,
-    paddingBottom: 12,
-    backgroundColor: colors.gray[0],
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontFamily: fonts.bold,
-    color: colors.gray[900],
-    letterSpacing: -0.3,
-    lineHeight: 32,
+    color: brand.ink,
+    letterSpacing: -0.4,
+    lineHeight: 34,
   },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  subtitle: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: colors.gray[400],
+    marginTop: 2,
   },
   iconBtn: {
     width: 40,
@@ -216,29 +215,55 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.gray[200],
   },
-  scroll: { paddingBottom: 100 },
+  scroll: { paddingBottom: 150 },
   padH: { paddingHorizontal: spacing.screenH },
+  captureWrap: { marginTop: 16 },
+  capture: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.bg.card,
+    borderRadius: radius.lg,
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingVertical: 8,
+    minHeight: 54,
+    ...shadows.card,
+  },
+  captureInput: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: fonts.regular,
+    color: brand.ink,
+  },
+  captureBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: brand.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: spacing.screenH,
-    paddingVertical: 12,
+    paddingVertical: 16,
     gap: 8,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: radius.pill,
-    backgroundColor: colors.gray[50],
-    borderWidth: 1,
-    borderColor: colors.gray[200],
+    backgroundColor: colors.bg.subtle,
   },
   activeChip: {
-    backgroundColor: colors.primary[50],
-    borderColor: colors.primary[500],
+    backgroundColor: brand.ink,
   },
   chipText: {
     fontSize: 13,
@@ -247,43 +272,26 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   activeChipText: {
-    color: colors.primary[500],
+    color: brand.canvas,
   },
-  sortRow: { paddingVertical: 4 },
-  sortText: {
-    fontSize: 12,
-    fontFamily: fonts.medium,
-    color: colors.gray[400],
-    lineHeight: 17,
-  },
-  taskList: { gap: 8, marginTop: 8 },
-  emptyState: { alignItems: 'center', paddingVertical: 40, gap: 8 },
-  emptyTitle: { fontSize: 17, fontFamily: fonts.semibold, color: colors.gray[600], lineHeight: 24 },
-  emptySubtitle: { fontSize: 15, fontFamily: fonts.regular, color: colors.gray[400], lineHeight: 22, textAlign: 'center' },
-  quickAddRow: {
+  sortChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 16,
-  },
-  quickAddInput: {
-    flex: 1,
-    height: 48,
-    borderRadius: radius.md,
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.gray[100],
-    backgroundColor: colors.bg.card,
-    paddingHorizontal: 16,
-    fontSize: 15,
-    fontFamily: fonts.regular,
-    color: colors.gray[900],
+    borderColor: colors.gray[200],
   },
-  quickAddBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
-    backgroundColor: colors.primary[500],
-    alignItems: 'center',
-    justifyContent: 'center',
+  sortChipText: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+    color: colors.gray[600],
+    lineHeight: 18,
   },
+  taskList: { gap: 10 },
+  emptyState: { alignItems: 'center', paddingVertical: 48, gap: 8 },
+  emptyTitle: { fontSize: 17, fontFamily: fonts.semibold, color: colors.gray[600], lineHeight: 24 },
+  emptySubtitle: { fontSize: 14, fontFamily: fonts.regular, color: colors.gray[400], lineHeight: 20, textAlign: 'center' },
 });

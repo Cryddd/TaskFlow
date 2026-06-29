@@ -3,10 +3,11 @@ import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platfor
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
+import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import InputField from '../../components/ui/InputField';
 import PrimaryButton from '../../components/ui/PrimaryButton';
-import { colors, fonts, spacing, radius } from '../../lib/theme';
+import { colors, brand, fonts, spacing, radius } from '../../lib/theme';
 import { showToast } from '../../lib/toast';
 import { handleSupabaseError } from '../../lib/api/utils';
 
@@ -43,8 +44,14 @@ export default function LoginScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <Text style={styles.logo}>TaskFlow</Text>
-            <Text style={styles.subtitle}>Welcome back. Sign in to continue.</Text>
+            <View style={styles.brandRow}>
+              <View style={styles.brandDot}>
+                <MaterialIcons name="bolt" size={15} color={brand.ink} />
+              </View>
+              <Text style={styles.brand}>TaskFlow</Text>
+            </View>
+            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.subtitle}>Sign in to pick up where you left off.</Text>
           </View>
 
           <View style={styles.form}>
@@ -87,13 +94,16 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg.app },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, padding: spacing.screenH, justifyContent: 'center' },
-  header: { marginBottom: 32, gap: 8 },
-  logo: { fontSize: 32, fontFamily: fonts.bold, color: colors.primary[500] },
-  subtitle: { fontSize: 15, fontFamily: fonts.regular, color: colors.gray[600], lineHeight: 22 },
+  header: { marginBottom: 28 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 22 },
+  brandDot: { width: 28, height: 28, borderRadius: 9, backgroundColor: brand.powder, alignItems: 'center', justifyContent: 'center' },
+  brand: { fontSize: 16, fontFamily: fonts.semibold, color: brand.ink },
+  title: { fontSize: 30, fontFamily: fonts.bold, color: brand.ink, letterSpacing: -0.5, lineHeight: 36 },
+  subtitle: { fontSize: 15, fontFamily: fonts.regular, color: colors.gray[600], lineHeight: 22, marginTop: 8 },
   form: { gap: 16 },
   forgot: { alignSelf: 'flex-end' },
-  forgotText: { fontSize: 13, fontFamily: fonts.medium, color: colors.primary[500] },
+  forgotText: { fontSize: 13, fontFamily: fonts.medium, color: brand.ink },
   footer: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 32 },
   footerText: { fontSize: 14, fontFamily: fonts.regular, color: colors.gray[600] },
-  link: { fontSize: 14, fontFamily: fonts.semibold, color: colors.primary[500] },
+  link: { fontSize: 14, fontFamily: fonts.semibold, color: brand.ink },
 });

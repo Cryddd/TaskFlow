@@ -1,5 +1,5 @@
 import { ActivityIndicator, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors, fonts, radius } from '../../lib/theme';
+import { colors, brand, fonts, radius } from '../../lib/theme';
 
 export default function PrimaryButton({ title, onPress, loading, disabled, style }) {
   const isDisabled = disabled || loading;
@@ -11,7 +11,7 @@ export default function PrimaryButton({ title, onPress, loading, disabled, style
       disabled={isDisabled}
     >
       {loading ? (
-        <ActivityIndicator color="#FFFFFF" />
+        <ActivityIndicator color={brand.canvas} />
       ) : (
         <Text style={[styles.text, isDisabled && styles.disabledText]}>{title}</Text>
       )}
@@ -21,20 +21,20 @@ export default function PrimaryButton({ title, onPress, loading, disabled, style
 
 const styles = StyleSheet.create({
   button: {
-    height: 52,
-    backgroundColor: colors.primary[500],
-    borderRadius: radius.sm,
+    height: 54,
+    backgroundColor: brand.ink,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
   disabled: {
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray[200],
   },
   text: {
-    fontSize: 15,
-    fontFamily: fonts.bold,
-    color: '#FFFFFF',
-    letterSpacing: 0.15,
+    fontSize: 16,
+    fontFamily: fonts.semibold,
+    color: brand.canvas,
+    letterSpacing: 0.1,
     lineHeight: 22,
   },
   disabledText: {

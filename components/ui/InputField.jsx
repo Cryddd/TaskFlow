@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, fonts, radius } from '../../lib/theme';
+import { colors, brand, fonts, radius } from '../../lib/theme';
 
 export default function InputField({
   label,
@@ -31,7 +31,7 @@ export default function InputField({
             showSecureToggle && styles.inputWithIcon,
             inputStyle,
           ]}
-          placeholderTextColor={colors.gray[200]}
+          placeholderTextColor={colors.gray[400]}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           multiline={multiline}
@@ -50,10 +50,10 @@ export default function InputField({
 }
 
 const styles = StyleSheet.create({
-  wrapper: { gap: 6 },
+  wrapper: { gap: 7 },
   inputRow: { position: 'relative' },
-  eyeBtn: { position: 'absolute', right: 12, top: 14 },
-  inputWithIcon: { paddingRight: 44 },
+  eyeBtn: { position: 'absolute', right: 14, top: 16 },
+  inputWithIcon: { paddingRight: 46 },
   label: {
     fontSize: 13,
     fontFamily: fonts.semibold,
@@ -61,15 +61,15 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   input: {
-    height: 48,
-    backgroundColor: colors.gray[50],
+    height: 52,
+    backgroundColor: colors.bg.card,
     borderWidth: 1,
     borderColor: colors.gray[100],
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     paddingHorizontal: 16,
     fontSize: 15,
     fontFamily: fonts.regular,
-    color: colors.gray[900],
+    color: brand.ink,
     lineHeight: 22,
   },
   multiline: {

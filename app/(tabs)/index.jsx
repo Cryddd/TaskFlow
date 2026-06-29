@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -13,7 +14,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { TapGestureHandler, State } from 'react-native-gesture-handler';
 import Svg, { Circle } from 'react-native-svg';
 import { useStore } from '../../lib/store';
-import { useTasks, useToggleTask, useDeleteTask, getSuggestedTasks, getDailyStats, getOverdueCount } from '../../lib/hooks/useTasks';
+import { useTasks, useToggleTask, useDeleteTask, getDailyStats, getOverdueCount } from '../../lib/hooks/useTasks';
 import { useHabits, useToggleHabit } from '../../lib/hooks/useHabits';
 import { useNotes } from '../../lib/hooks/useNotes';
 import { useGoals } from '../../lib/hooks/useGoals';
@@ -43,8 +44,13 @@ function greetingFor(date = new Date()) {
   return 'Good evening';
 }
 
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
 const RING_R = 32;
 const RING_CIRC = 2 * Math.PI * RING_R;
+
+// cubic-bezier(0.22, 1, 0.36, 1) — calm ease-out
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
 function heroState(remainingTasks, overallPct) {
   if (overallPct >= 100 || remainingTasks === 0) {
@@ -109,8 +115,28 @@ export default function HomeScreen() {
 
   const remainingTasks = Math.max(0, stats.tasks.total - stats.tasks.completed);
   const hero = heroState(remainingTasks, stats.overallPct);
-  const ringOffset = RING_CIRC * (1 - Math.min(100, Math.max(0, stats.overallPct)) / 100);
   const firstName = (profile?.fullName || '').split(' ')[0] || 'there';
+
+  // Hero entrance + ring fill choreography.
+  const heroIn = useRef(new Animated.Value(0)).current;
+  const ringAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(heroIn, { toValue: 1, duration: 460, useNativeDriver: true, easing: easeOut }).start();
+  }, []);
+  useEffect(() => {
+    Animated.timing(ringAnim, {
+      toValue: Math.min(1, Math.max(0, stats.overallPct / 100)),
+      duration: 850,
+      delay: 150,
+      useNativeDriver: false,
+      easing: easeOut,
+    }).start();
+  }, [stats.overallPct]);
+  const ringDashoffset = ringAnim.interpolate({ inputRange: [0, 1], outputRange: [RING_CIRC, 0] });
+  const heroStyle = {
+    opacity: heroIn,
+    transform: [{ translateY: heroIn.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -137,42 +163,44 @@ export default function HomeScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
       >
         {/* Hero */}
-        <GradientMesh variant="hero" radius={radius['2xl']} style={styles.hero}>
-          <View style={styles.heroRow}>
-            <View style={styles.heroTexts}>
-              <Text style={styles.heroEyebrow}>{hero.eyebrow}</Text>
-              <Text style={styles.heroTitle}>{hero.title}</Text>
-              <Text style={styles.heroSub}>{hero.sub}</Text>
-            </View>
-            <View style={styles.heroRing}>
-              <Svg width={78} height={78}>
-                <Circle cx={39} cy={39} r={RING_R} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth={7} />
-                <Circle
-                  cx={39} cy={39} r={RING_R}
-                  fill="none"
-                  stroke={brand.powder}
-                  strokeWidth={7}
-                  strokeLinecap="round"
-                  strokeDasharray={`${RING_CIRC} ${RING_CIRC}`}
-                  strokeDashoffset={ringOffset}
-                  transform="rotate(-90, 39, 39)"
-                />
-              </Svg>
-              <View style={styles.heroRingCenter} pointerEvents="none">
-                <Text style={styles.heroRingPct}>{stats.overallPct}%</Text>
-                <Text style={styles.heroRingLabel}>done</Text>
+        <Animated.View style={heroStyle}>
+          <GradientMesh variant="hero" radius={radius['2xl']} style={styles.hero}>
+            <View style={styles.heroRow}>
+              <View style={styles.heroTexts}>
+                <Text style={styles.heroEyebrow}>{hero.eyebrow}</Text>
+                <Text style={styles.heroTitle}>{hero.title}</Text>
+                <Text style={styles.heroSub}>{hero.sub}</Text>
+              </View>
+              <View style={styles.heroRing}>
+                <Svg width={78} height={78}>
+                  <Circle cx={39} cy={39} r={RING_R} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth={7} />
+                  <AnimatedCircle
+                    cx={39} cy={39} r={RING_R}
+                    fill="none"
+                    stroke={brand.powder}
+                    strokeWidth={7}
+                    strokeLinecap="round"
+                    strokeDasharray={`${RING_CIRC} ${RING_CIRC}`}
+                    strokeDashoffset={ringDashoffset}
+                    transform="rotate(-90, 39, 39)"
+                  />
+                </Svg>
+                <View style={styles.heroRingCenter} pointerEvents="none">
+                  <Text style={styles.heroRingPct}>{stats.overallPct}%</Text>
+                  <Text style={styles.heroRingLabel}>done</Text>
+                </View>
               </View>
             </View>
-          </View>
-          <TouchableOpacity
-            style={styles.heroCta}
-            activeOpacity={0.85}
-            onPress={() => router.push('/(tabs)/tasks')}
-          >
-            <Text style={styles.heroCtaText}>View tasks</Text>
-            <MaterialIcons name="arrow-forward" size={15} color={brand.ink} />
-          </TouchableOpacity>
-        </GradientMesh>
+            <TouchableOpacity
+              style={styles.heroCta}
+              activeOpacity={0.85}
+              onPress={() => router.push('/(tabs)/tasks')}
+            >
+              <Text style={styles.heroCtaText}>View tasks</Text>
+              <MaterialIcons name="arrow-forward" size={15} color={brand.ink} />
+            </TouchableOpacity>
+          </GradientMesh>
+        </Animated.View>
 
         {/* Quick capture */}
         <TouchableOpacity
