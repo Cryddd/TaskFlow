@@ -278,7 +278,7 @@ export default function TaskNewScreen() {
               ref={titleRef}
               style={styles.titleInput}
               placeholder="What needs to be done?"
-              placeholderTextColor={colors.gray[200]}
+              placeholderTextColor={colors.gray[400]}
               value={title}
               onChangeText={setTitle}
               autoFocus

@@ -9,21 +9,26 @@ import Svg, { Defs, RadialGradient, LinearGradient, Stop, Rect } from 'react-nat
 //   • touch  — drag to push the light around
 // Tilt degrades gracefully if expo-sensors isn't available.
 
-const BASE = { top: '#060A1A', bottom: '#111B3E' };
+const BASE = { top: '#04060F', bottom: '#0C1430' };
 
-// cx/cy/r in %, depth = parallax strength, ax/ay = drift amplitude (px).
+// cx/cy/r in %, depth = parallax strength, ax/ay = drift amplitude (px),
+// breathe = slow scale pulse. Layered for a deep, detailed neo mesh.
 const BLOBS = [
   {
-    key: 'sweep', cx: '30%', cy: '62%', r: '78%', depth: 1.0, ax: 18, ay: 15,
-    stops: [['0', '#FFFFFF', 0.42], ['0.45', '#AFD2FA', 0.18], ['1', '#AFD2FA', 0]],
+    key: 'sweep', cx: '28%', cy: '66%', r: '90%', depth: 1.1, ax: 24, ay: 20, breathe: true,
+    stops: [['0', '#FFFFFF', 0.55], ['0.36', '#CFE2FB', 0.22], ['0.68', '#AFD2FA', 0.08], ['1', '#AFD2FA', 0]],
   },
   {
-    key: 'cool', cx: '86%', cy: '13%', r: '56%', depth: 0.6, ax: 13, ay: 11,
-    stops: [['0', '#AFD2FA', 0.5], ['1', '#AFD2FA', 0]],
+    key: 'ember', cx: '88%', cy: '7%', r: '54%', depth: 0.5, ax: 15, ay: 12,
+    stops: [['0', '#D08A55', 0.55], ['0.45', '#B9915E', 0.2], ['1', '#B9915E', 0]],
   },
   {
-    key: 'ember', cx: '92%', cy: '95%', r: '50%', depth: 0.35, ax: 9, ay: 9,
-    stops: [['0', '#C2854A', 0.5], ['0.5', '#B9915E', 0.2], ['1', '#B9915E', 0]],
+    key: 'cool', cx: '80%', cy: '90%', r: '58%', depth: 0.7, ax: 16, ay: 14, breathe: true,
+    stops: [['0', '#AFD2FA', 0.34], ['1', '#AFD2FA', 0]],
+  },
+  {
+    key: 'deep', cx: '8%', cy: '12%', r: '48%', depth: 0.4, ax: 10, ay: 10,
+    stops: [['0', '#2C3C80', 0.42], ['1', '#2C3C80', 0]],
   },
 ];
 
@@ -39,6 +44,8 @@ export default function LivingGradient({ style, children, pointerEvents }) {
   const touchX = useRef(new Animated.Value(0)).current;
   const touchY = useRef(new Animated.Value(0)).current;
 
+  const breathe = useRef(new Animated.Value(0)).current;
+
   // Continuous seamless drift loop.
   useEffect(() => {
     const loop = Animated.loop(
@@ -47,6 +54,19 @@ export default function LivingGradient({ style, children, pointerEvents }) {
     loop.start();
     return () => loop.stop();
   }, []);
+
+  // Slow breathing pulse on the light layers — alive even when idle.
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathe, { toValue: 1, duration: 4200, useNativeDriver: true }),
+        Animated.timing(breathe, { toValue: 0, duration: 4200, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+  const breatheScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.09] });
 
   // Device tilt via accelerometer, low-pass filtered for smoothness.
   useEffect(() => {
@@ -62,8 +82,8 @@ export default function LivingGradient({ style, children, pointerEvents }) {
         sub = Accelerometer.addListener(({ x, y }) => {
           sx = sx * 0.82 + x * 0.18;
           sy = sy * 0.82 + y * 0.18;
-          tiltX.setValue(-sx * 26);
-          tiltY.setValue(sy * 26);
+          tiltX.setValue(-sx * 38);
+          tiltY.setValue(sy * 38);
         });
       } catch (e) {
         // expo-sensors unavailable — drift + touch still work.
@@ -85,8 +105,8 @@ export default function LivingGradient({ style, children, pointerEvents }) {
         const { locationX, locationY } = e.nativeEvent;
         const nx = (locationX / size.w - 0.5) * 2;
         const ny = (locationY / size.h - 0.5) * 2;
-        touchX.setValue(nx * 30);
-        touchY.setValue(ny * 30);
+        touchX.setValue(nx * 44);
+        touchY.setValue(ny * 44);
       },
       onPanResponderRelease: () => {
         Animated.spring(touchX, { toValue: 0, useNativeDriver: true, speed: 6, bounciness: 6 }).start();
@@ -108,10 +128,12 @@ export default function LivingGradient({ style, children, pointerEvents }) {
       inputRange: [0, 0.25, 0.5, 0.75, 1],
       outputRange: [b.ay, 0, -b.ay, 0, b.ay],
     });
-    return [
+    const t = [
       { translateX: Animated.add(driftX, Animated.add(Animated.multiply(tiltX, b.depth), Animated.multiply(touchX, b.depth))) },
       { translateY: Animated.add(driftY, Animated.add(Animated.multiply(tiltY, b.depth), Animated.multiply(touchY, b.depth))) },
     ];
+    if (b.breathe) t.push({ scale: breatheScale });
+    return t;
   };
 
   return (

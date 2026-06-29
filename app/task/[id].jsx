@@ -29,8 +29,8 @@ function getDueBadge(dateStr) {
   today.setHours(0, 0, 0, 0);
   due.setHours(0, 0, 0, 0);
   const diff = Math.round((due - today) / (1000 * 60 * 60 * 24));
-  if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, bg: '#FEF2F2', text: '#EF4444' };
-  if (diff === 0) return { label: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), bg: '#FFFBEB', text: '#F59E0B' };
+  if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, bg: '#FCEAEA', text: '#C13338' };
+  if (diff === 0) return { label: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), bg: '#F3EADD', text: '#9A7647' };
   return { label: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), bg: colors.gray[50], text: colors.gray[400] };
 }
 
