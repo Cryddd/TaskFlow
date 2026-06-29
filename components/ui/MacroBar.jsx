@@ -3,9 +3,9 @@ import { colors, fonts, radius } from '../../lib/theme';
 import ProgressBar from './ProgressBar';
 
 const MACRO_COLORS = {
-  protein: '#14B8A6',
-  carbs:   '#F59E0B',
-  fat:     '#F97316',
+  protein: '#5B8DD6', // powder blue
+  carbs:   '#2BA86B', // mint
+  fat:     '#B9915E', // pale brown
 };
 
 export default function MacroBar({ label, current, target, unit, macroKey, style }) {

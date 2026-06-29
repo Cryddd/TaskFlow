@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTasks, useCreateTask, useUpdateTask } from '../lib/hooks/useTasks';
-import { colors, fonts, spacing, radius } from '../lib/theme';
+import { colors, brand, fonts, spacing, radius, priorityBg, priorityText } from '../lib/theme';
 import { showToast } from '../lib/toast';
 import {
   getTagSuggestionGroups,
@@ -38,10 +38,10 @@ const CATEGORIES = [
 ];
 
 const PRIORITIES = [
-  { label: 'Urgent', value: 'urgent', bg: '#FEF2F2', active: '#EF4444' },
-  { label: 'High',   value: 'high',   bg: '#FFFBEB', active: '#D97706' },
-  { label: 'Medium', value: 'medium', bg: '#EEEDFE', active: '#534AB7' },
-  { label: 'Low',    value: 'low',    bg: '#F0FDF4', active: '#16A34A' },
+  { label: 'Urgent', value: 'urgent' },
+  { label: 'High',   value: 'high'   },
+  { label: 'Medium', value: 'medium' },
+  { label: 'Low',    value: 'low'    },
 ];
 
 const DIFFICULTIES = [
@@ -347,13 +347,13 @@ export default function TaskNewScreen() {
                   style={[
                     styles.priorityPill,
                     priority === p.value
-                      ? { backgroundColor: p.bg, borderColor: p.active }
-                      : { backgroundColor: colors.gray[50], borderColor: colors.gray[200] },
+                      ? { backgroundColor: priorityBg[p.value], borderColor: priorityText[p.value] }
+                      : { backgroundColor: colors.bg.subtle, borderColor: colors.gray[200] },
                   ]}
                   onPress={() => setPriority(p.value)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.pillText, { color: priority === p.value ? p.active : colors.gray[600] }]}>
+                  <Text style={[styles.pillText, { color: priority === p.value ? priorityText[p.value] : colors.gray[600] }]}>
                     {p.label}
                   </Text>
                 </TouchableOpacity>

@@ -12,7 +12,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useStore } from '../lib/store';
 import { useTasks } from '../lib/hooks/useTasks';
 import { useNutrition, useAddMealItem } from '../lib/hooks/useMisc';
-import { colors, fonts, spacing, radius, shadows } from '../lib/theme';
+import { colors, brand, fonts, spacing, radius, shadows } from '../lib/theme';
 import WeekStrip from '../components/ui/WeekStrip';
 import MacroBar from '../components/ui/MacroBar';
 
@@ -30,18 +30,12 @@ function MealGroup({ meal, defaultExpanded = true, onAddFood }) {
   return (
     <View style={styles.mealGroup}>
       <TouchableOpacity style={styles.mealHeader} onPress={() => setExpanded(!expanded)} activeOpacity={0.7}>
-        <MaterialIcons
-          name={MEAL_ICONS[meal.type] ?? 'restaurant'}
-          size={18}
-          color={colors.gray[600]}
-        />
+        <View style={styles.mealIcon}>
+          <MaterialIcons name={MEAL_ICONS[meal.type] ?? 'restaurant'} size={19} color={brand.ink} />
+        </View>
         <Text style={styles.mealType}>{meal.type}</Text>
         <Text style={styles.mealCals}>{totalCals} kcal</Text>
-        <MaterialIcons
-          name={expanded ? 'expand-less' : 'expand-more'}
-          size={18}
-          color={colors.gray[400]}
-        />
+        <MaterialIcons name={expanded ? 'expand-less' : 'expand-more'} size={20} color={colors.gray[400]} />
       </TouchableOpacity>
 
       {expanded && (
@@ -54,7 +48,7 @@ function MealGroup({ meal, defaultExpanded = true, onAddFood }) {
                 <View style={styles.mealItemLeft}>
                   <Text style={styles.mealItemName}>{item.name}</Text>
                   <Text style={styles.mealItemMacros}>
-                    P: {item.protein}g · C: {item.carbs}g · F: {item.fat}g
+                    P {item.protein}g · C {item.carbs}g · F {item.fat}g
                   </Text>
                 </View>
                 <Text style={styles.mealItemCals}>{item.calories}</Text>
@@ -62,7 +56,7 @@ function MealGroup({ meal, defaultExpanded = true, onAddFood }) {
             ))
           )}
           <TouchableOpacity style={styles.addFoodRow} onPress={() => onAddFood?.(meal.type)}>
-            <MaterialIcons name="add" size={14} color={colors.primary[500]} />
+            <MaterialIcons name="add" size={16} color={brand.ink} />
             <Text style={styles.addFoodText}>Add food</Text>
           </TouchableOpacity>
         </View>
@@ -74,7 +68,7 @@ function MealGroup({ meal, defaultExpanded = true, onAddFood }) {
 export default function NutritionScreen() {
   const router = useRouter();
   const { selectedDate, setSelectedDate } = useStore();
-  const { data: nutrition, isLoading } = useNutrition(selectedDate);
+  const { data: nutrition } = useNutrition(selectedDate);
   const addMealMut = useAddMealItem();
   const { data: tasks = [] } = useTasks();
 
@@ -97,6 +91,7 @@ export default function NutritionScreen() {
   };
 
   const calPct = Math.round((calories.current / calories.target) * 100);
+  const calRemaining = Math.max(0, calories.target - calories.current);
 
   const tasksPerDate = tasks.reduce((acc, t) => {
     if (t.dueDate) acc[t.dueDate] = (acc[t.dueDate] ?? 0) + 1;
@@ -105,104 +100,66 @@ export default function NutritionScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Top Bar */}
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <MaterialIcons name="arrow-back" size={24} color={colors.gray[900]} />
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={8} style={styles.iconBtn}>
+          <MaterialIcons name="arrow-back" size={22} color={brand.ink} />
         </TouchableOpacity>
-        <Text style={styles.screenTitle}>Nutrition</Text>
-        <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <MaterialIcons name="notifications" size={22} color={colors.gray[600]} />
-        </TouchableOpacity>
+        <Text style={styles.title}>Nutrition</Text>
+        <View style={styles.iconBtn} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Week Strip */}
         <View style={styles.section}>
-          <WeekStrip
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            tasksPerDate={tasksPerDate}
-          />
+          <WeekStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} tasksPerDate={tasksPerDate} />
         </View>
 
         {/* Macro Summary Card */}
         <View style={styles.section}>
-          <View style={[styles.macroCard, shadows.card]}>
-            {/* Header */}
+          <View style={styles.macroCard}>
             <View style={styles.macroHeader}>
-              <Text style={styles.macroTitle}>Today's Nutrition</Text>
-              <View style={styles.macroHeaderRight}>
-                <Text style={styles.macroPct}>{calPct}%</Text>
-                <View style={styles.miniBarTrack}>
-                  <View style={[styles.miniBarFill, { width: `${Math.min(100, calPct)}%` }]} />
-                </View>
+              <Text style={styles.macroTitle}>Today's intake</Text>
+              <View style={styles.pctPill}>
+                <Text style={styles.pctText}>{calPct}%</Text>
               </View>
             </View>
 
-            {/* Calories */}
             <View style={styles.caloriesRow}>
-              <Text style={styles.caloriesLabel}>Calories</Text>
-              <Text style={styles.caloriesValue}>
-                {calories.current.toLocaleString()} / {calories.target.toLocaleString()} kcal
-              </Text>
+              <Text style={styles.bigCals}>{calories.current.toLocaleString()}</Text>
+              <Text style={styles.ofTarget}> / {calories.target.toLocaleString()} kcal</Text>
             </View>
+
             <View style={styles.calBarTrack}>
               <View style={[styles.calBarFill, { width: `${Math.min(100, calPct)}%` }]} />
             </View>
+            <Text style={styles.remaining}>{calRemaining.toLocaleString()} kcal remaining</Text>
 
-            {/* Macros */}
             <View style={styles.macrosGrid}>
-              <MacroBar
-                label="Protein"
-                macroKey="protein"
-                current={protein.current}
-                target={protein.target}
-                unit={protein.unit}
-                style={styles.macroItem}
-              />
-              <MacroBar
-                label="Carbs"
-                macroKey="carbs"
-                current={carbs.current}
-                target={carbs.target}
-                unit={carbs.unit}
-                style={styles.macroItem}
-              />
-              <MacroBar
-                label="Fat"
-                macroKey="fat"
-                current={fat.current}
-                target={fat.target}
-                unit={fat.unit}
-                style={styles.macroItem}
-              />
+              <MacroBar label="Protein" macroKey="protein" current={protein.current} target={protein.target} unit={protein.unit} />
+              <MacroBar label="Carbs" macroKey="carbs" current={carbs.current} target={carbs.target} unit={carbs.unit} />
+              <MacroBar label="Fat" macroKey="fat" current={fat.current} target={fat.target} unit={fat.unit} />
             </View>
           </View>
         </View>
 
         {/* Meals */}
         <View style={styles.section}>
-          <Text style={styles.mealsTitle}>Today's Meals</Text>
+          <Text style={styles.mealsTitle}>Meals</Text>
           <View style={styles.mealsList}>
             {meals.map((meal, idx) => (
-              <MealGroup
-                key={meal.id}
-                meal={meal}
-                defaultExpanded={idx < 2}
-                onAddFood={handleAddFood}
-              />
+              <MealGroup key={meal.id} meal={meal} defaultExpanded={idx < 2} onAddFood={handleAddFood} />
             ))}
           </View>
         </View>
 
-        <View style={{ height: 80 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* FAB */}
-      <TouchableOpacity style={styles.addFab}>
-        <MaterialIcons name="add" size={20} color={colors.primary[500]} />
-        <Text style={styles.addFabText}>Log Meal</Text>
+      {/* Log Meal FAB */}
+      <TouchableOpacity style={styles.addFab} activeOpacity={0.9}>
+        <MaterialIcons name="add" size={20} color={brand.canvas} />
+        <Text style={styles.addFabText}>Log meal</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -210,29 +167,28 @@ export default function NutritionScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg.app },
-  topBar: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.screenH,
-    height: 56,
-    backgroundColor: colors.bg.elevated,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
+    paddingTop: 8,
+    paddingBottom: 8,
   },
-  screenTitle: {
-    fontSize: 20,
+  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  title: {
+    fontSize: 18,
     fontFamily: fonts.bold,
-    color: colors.gray[900],
-    lineHeight: 28,
+    color: brand.ink,
   },
   scroll: { paddingBottom: 40 },
   section: { paddingHorizontal: spacing.screenH, marginTop: 20 },
   macroCard: {
     backgroundColor: colors.bg.card,
-    borderRadius: radius.lg,
-    padding: 16,
-    gap: 14,
+    borderRadius: radius.xl,
+    padding: 18,
+    gap: 12,
+    ...shadows.card,
   },
   macroHeader: {
     flexDirection: 'row',
@@ -240,101 +196,94 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   macroTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontFamily: fonts.semibold,
-    color: colors.gray[900],
-    lineHeight: 24,
+    color: brand.ink,
   },
-  macroHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  macroPct: {
-    fontSize: 15,
+  pctPill: {
+    backgroundColor: colors.accent.powder50,
+    borderRadius: radius.pill,
+    paddingHorizontal: 11,
+    paddingVertical: 4,
+  },
+  pctText: {
+    fontSize: 13,
     fontFamily: fonts.bold,
-    color: colors.primary[500],
-    lineHeight: 22,
+    color: colors.accent.powder600,
   },
-  miniBarTrack: {
-    width: 60,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.gray[100],
-    overflow: 'hidden',
+  caloriesRow: { flexDirection: 'row', alignItems: 'baseline' },
+  bigCals: {
+    fontSize: 30,
+    fontFamily: fonts.bold,
+    color: brand.ink,
+    letterSpacing: -0.5,
   },
-  miniBarFill: {
-    height: '100%',
-    borderRadius: 2,
-    backgroundColor: colors.primary[500],
-  },
-  caloriesRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  caloriesLabel: {
-    fontSize: 14,
-    fontFamily: fonts.semibold,
-    color: colors.gray[900],
-    lineHeight: 19,
-  },
-  caloriesValue: {
+  ofTarget: {
     fontSize: 14,
     fontFamily: fonts.regular,
-    color: colors.gray[600],
-    lineHeight: 19,
+    color: colors.gray[400],
   },
   calBarTrack: {
-    height: 8,
-    borderRadius: 4,
+    height: 10,
+    borderRadius: radius.pill,
     backgroundColor: colors.gray[100],
     overflow: 'hidden',
-    marginTop: -8,
   },
   calBarFill: {
     height: '100%',
-    borderRadius: 4,
-    backgroundColor: colors.primary[500],
+    borderRadius: radius.pill,
+    backgroundColor: brand.powder,
   },
-  macrosGrid: { gap: 10 },
-  macroItem: {},
+  remaining: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+    color: colors.gray[600],
+  },
+  macrosGrid: { gap: 12, marginTop: 4 },
   mealsTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: fonts.bold,
-    color: colors.gray[900],
-    lineHeight: 28,
+    color: brand.ink,
     marginBottom: 12,
   },
-  mealsList: { gap: 8 },
+  mealsList: { gap: 10 },
   mealGroup: {
     backgroundColor: colors.bg.card,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     overflow: 'hidden',
     ...shadows.card,
   },
   mealHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  mealIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.accent.powder50,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mealType: {
     flex: 1,
     fontSize: 15,
     fontFamily: fonts.semibold,
-    color: colors.gray[900],
-    lineHeight: 22,
+    color: brand.ink,
   },
   mealCals: {
     fontSize: 13,
     fontFamily: fonts.medium,
-    color: colors.gray[600],
-    lineHeight: 18,
+    color: colors.accent.sand600,
   },
   mealItems: {
     borderTopWidth: 1,
     borderTopColor: colors.gray[100],
     paddingHorizontal: 16,
     paddingVertical: 4,
-    gap: 2,
   },
   mealItem: {
     flexDirection: 'row',
@@ -348,26 +297,22 @@ const styles = StyleSheet.create({
   mealItemName: {
     fontSize: 14,
     fontFamily: fonts.medium,
-    color: colors.gray[900],
-    lineHeight: 19,
+    color: brand.ink,
   },
   mealItemMacros: {
     fontSize: 12,
     fontFamily: fonts.regular,
     color: colors.gray[400],
-    lineHeight: 17,
   },
   mealItemCals: {
     fontSize: 14,
     fontFamily: fonts.semibold,
     color: colors.gray[600],
-    lineHeight: 19,
   },
   emptyMeal: {
     fontSize: 13,
     fontFamily: fonts.regular,
     color: colors.gray[400],
-    lineHeight: 18,
     paddingVertical: 12,
   },
   addFoodRow: {
@@ -378,33 +323,25 @@ const styles = StyleSheet.create({
   },
   addFoodText: {
     fontSize: 13,
-    fontFamily: fonts.medium,
-    color: colors.primary[500],
-    lineHeight: 18,
+    fontFamily: fonts.semibold,
+    color: brand.ink,
   },
   addFab: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 28,
     right: 20,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: colors.bg.card,
+    backgroundColor: brand.ink,
     borderRadius: radius.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1.5,
-    borderColor: colors.primary[200],
-    shadowColor: colors.gray[900],
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    ...shadows.floating,
   },
   addFabText: {
     fontSize: 14,
     fontFamily: fonts.semibold,
-    color: colors.primary[500],
-    lineHeight: 19,
+    color: brand.canvas,
   },
 });
