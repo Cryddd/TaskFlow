@@ -35,7 +35,7 @@ const BLOBS = [
 
 let _uid = 0;
 
-export default function LivingGradient({ style, children, pointerEvents }) {
+export default function LivingGradient({ style, children, pointerEvents, interactive = true }) {
   const prefix = useRef(`lg${_uid++}`).current;
   const size = useRef({ w: 1, h: 1 }).current;
 
@@ -44,6 +44,11 @@ export default function LivingGradient({ style, children, pointerEvents }) {
   const { reduce } = useMotion();
   const reduceRef = useRef(reduce);
   reduceRef.current = reduce;
+
+  // `interactive={false}` keeps drift + tilt but drops touch parallax — used
+  // when embedded in a ScrollView (e.g. the Home hero) so it never steals scroll.
+  const interactiveRef = useRef(interactive);
+  interactiveRef.current = interactive;
 
   const drift = useRef(new Animated.Value(0)).current;
   const tiltX = useRef(new Animated.Value(0)).current;
@@ -111,8 +116,10 @@ export default function LivingGradient({ style, children, pointerEvents }) {
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
+      // Only claim clearly-horizontal drags so vertical scrolling passes through.
       onMoveShouldSetPanResponder: (_e, g) =>
-        !reduceRef.current && Math.abs(g.dx) + Math.abs(g.dy) > 6,
+        interactiveRef.current && !reduceRef.current &&
+        Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.2,
       onPanResponderMove: (e) => {
         const { locationX, locationY } = e.nativeEvent;
         const nx = (locationX / size.w - 0.5) * 2;

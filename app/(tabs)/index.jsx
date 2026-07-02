@@ -23,7 +23,7 @@ import { useProfile } from '../../lib/hooks/useProfile';
 import { colors, brand, fonts, spacing, radius, shadows } from '../../lib/theme';
 import { handleTaskToggle, handleTaskDelete } from '../../lib/taskHandlers';
 import { showToast } from '../../lib/toast';
-import GradientMesh from '../../components/ui/GradientMesh';
+import LivingGradient from '../../components/ui/LivingGradient';
 import HabitCard from '../../components/ui/HabitCard';
 import TaskItem from '../../components/ui/TaskItem';
 import SectionHeader from '../../components/ui/SectionHeader';
@@ -55,15 +55,25 @@ const RING_CIRC = 2 * Math.PI * RING_R;
 // cubic-bezier(0.22, 1, 0.36, 1) — calm ease-out
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
-function heroState(remainingTasks, overallPct) {
-  if (overallPct >= 100 || remainingTasks === 0) {
-    return { eyebrow: 'ALL DONE', title: "You're all caught up", sub: 'Nothing left today — nice work.' };
+function heroState({ totalTasks, remainingTasks, habitsCount, pct }) {
+  // Truly empty day — no tasks and no habits. Don't show a misleading 0% ring.
+  if (totalTasks === 0 && habitsCount === 0) {
+    return { eyebrow: 'TODAY', title: 'A fresh, open day', sub: 'Capture your first task below to get going.', showRing: false };
   }
-  const eyebrow = remainingTasks <= 2 ? 'LIGHT WORKLOAD' : remainingTasks <= 5 ? 'BALANCED WORKLOAD' : 'BUSY DAY';
+  // Everything genuinely complete.
+  if (pct >= 100) {
+    return { eyebrow: 'ALL DONE', title: "You're all caught up", sub: 'Nothing left today — nice work.', showRing: true };
+  }
+  // Habits only (no tasks today) — keep it about streaks, not "caught up".
+  if (totalTasks === 0) {
+    return { eyebrow: 'TODAY', title: 'Stay on your habits', sub: 'No tasks today — keep your streaks alive.', showRing: true };
+  }
+  const eyebrow = remainingTasks <= 2 ? 'LIGHT DAY' : remainingTasks <= 5 ? 'BALANCED DAY' : 'BUSY DAY';
   return {
     eyebrow,
     title: 'Keep your day on track',
     sub: `${remainingTasks} task${remainingTasks === 1 ? '' : 's'} remaining today`,
+    showRing: true,
   };
 }
 
@@ -119,7 +129,12 @@ export default function HomeScreen() {
   };
 
   const remainingTasks = Math.max(0, stats.tasks.total - stats.tasks.completed);
-  const hero = heroState(remainingTasks, stats.overallPct);
+  const hero = heroState({
+    totalTasks: stats.tasks.total,
+    remainingTasks,
+    habitsCount: habits.length,
+    pct: stats.overallPct,
+  });
   const firstName = (profile?.fullName || '').split(' ')[0] || 'there';
 
   // Which focus areas the user picked → drives what shows on the Home hub.
@@ -295,34 +310,40 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary[500]} />}
       >
-        {/* Hero */}
-        <Animated.View style={heroStyle}>
-          <GradientMesh variant="hero" radius={radius['2xl']} style={styles.hero}>
+        {/* Hero — alive, tilt-reactive gradient */}
+        <Animated.View style={[styles.heroWrap, heroStyle]}>
+          <LivingGradient interactive={false} style={styles.hero}>
             <View style={styles.heroRow}>
               <View style={styles.heroTexts}>
                 <Text style={styles.heroEyebrow}>{hero.eyebrow}</Text>
                 <Text style={styles.heroTitle}>{hero.title}</Text>
                 <Text style={styles.heroSub}>{hero.sub}</Text>
               </View>
-              <View style={styles.heroRing}>
-                <Svg width={78} height={78}>
-                  <Circle cx={39} cy={39} r={RING_R} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth={7} />
-                  <AnimatedCircle
-                    cx={39} cy={39} r={RING_R}
-                    fill="none"
-                    stroke={brand.powder}
-                    strokeWidth={7}
-                    strokeLinecap="round"
-                    strokeDasharray={`${RING_CIRC} ${RING_CIRC}`}
-                    strokeDashoffset={ringDashoffset}
-                    transform="rotate(-90, 39, 39)"
-                  />
-                </Svg>
-                <View style={styles.heroRingCenter} pointerEvents="none">
-                  <Text style={styles.heroRingPct}>{stats.overallPct}%</Text>
-                  <Text style={styles.heroRingLabel}>done</Text>
+              {hero.showRing ? (
+                <View style={styles.heroRing}>
+                  <Svg width={78} height={78}>
+                    <Circle cx={39} cy={39} r={RING_R} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth={7} />
+                    <AnimatedCircle
+                      cx={39} cy={39} r={RING_R}
+                      fill="none"
+                      stroke={brand.powder}
+                      strokeWidth={7}
+                      strokeLinecap="round"
+                      strokeDasharray={`${RING_CIRC} ${RING_CIRC}`}
+                      strokeDashoffset={ringDashoffset}
+                      transform="rotate(-90, 39, 39)"
+                    />
+                  </Svg>
+                  <View style={styles.heroRingCenter} pointerEvents="none">
+                    <Text style={styles.heroRingPct}>{stats.overallPct}%</Text>
+                    <Text style={styles.heroRingLabel}>done</Text>
+                  </View>
                 </View>
-              </View>
+              ) : (
+                <View style={styles.heroBadge}>
+                  <MaterialIcons name="wb-sunny" size={30} color={brand.powder} />
+                </View>
+              )}
             </View>
             <TouchableOpacity
               style={styles.heroCta}
@@ -332,7 +353,7 @@ export default function HomeScreen() {
               <Text style={styles.heroCtaText}>View tasks</Text>
               <MaterialIcons name="arrow-forward" size={15} color={brand.ink} />
             </TouchableOpacity>
-          </GradientMesh>
+          </LivingGradient>
         </Animated.View>
 
         {/* Quick capture */}
@@ -459,15 +480,26 @@ const styles = StyleSheet.create({
   scroll: {
     paddingBottom: 140,
   },
-  hero: {
+  heroWrap: {
     marginHorizontal: spacing.screenH,
     marginTop: 18,
-    padding: 20,
+  },
+  hero: {
+    borderRadius: radius['2xl'],
+    padding: 22,
   },
   heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 16,
+  },
+  heroBadge: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.10)',
   },
   heroTexts: {
     flex: 1,
