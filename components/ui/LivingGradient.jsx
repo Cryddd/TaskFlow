@@ -75,7 +75,7 @@ export default function LivingGradient({ style, children, pointerEvents }) {
     loop.start();
     return () => loop.stop();
   }, [reduce]);
-  const breatheScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.09] });
+  const breatheScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
 
   // Device tilt via accelerometer, low-pass filtered for smoothness.
   useEffect(() => {
@@ -88,12 +88,13 @@ export default function LivingGradient({ style, children, pointerEvents }) {
         const { Accelerometer } = require('expo-sensors');
         const available = await Accelerometer.isAvailableAsync();
         if (!available || cancelled) return;
-        Accelerometer.setUpdateInterval(60);
+        // Faster sampling + gentle low-pass = smooth, lag-free parallax.
+        Accelerometer.setUpdateInterval(24);
         sub = Accelerometer.addListener(({ x, y }) => {
-          sx = sx * 0.82 + x * 0.18;
-          sy = sy * 0.82 + y * 0.18;
-          tiltX.setValue(-sx * 38);
-          tiltY.setValue(sy * 38);
+          sx = sx * 0.85 + x * 0.15;
+          sy = sy * 0.85 + y * 0.15;
+          tiltX.setValue(-sx * 54);
+          tiltY.setValue(sy * 54);
         });
       } catch (e) {
         // expo-sensors unavailable — drift + touch still work.
