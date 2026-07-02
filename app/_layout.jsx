@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Toast from 'react-native-toast-message';
 import { toastConfig } from '../lib/toastConfig';
 import { AppProviders } from '../lib/providers';
+import { useStore } from '../lib/store';
 import {
   useFonts,
   Inter_400Regular,
@@ -24,13 +25,24 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
+  const hydratePrefs = useStore((s) => s.hydratePrefs);
+  const [prefsReady, setPrefsReady] = useState(false);
+
+  // Load persisted prefs (focus areas, motion) before first paint so the Home
+  // hub renders the personalized layout immediately — no flash of all sections.
   useEffect(() => {
-    if (fontsLoaded) {
+    hydratePrefs().finally(() => setPrefsReady(true));
+  }, [hydratePrefs]);
+
+  const ready = fontsLoaded && prefsReady;
+
+  useEffect(() => {
+    if (ready) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [ready]);
 
-  if (!fontsLoaded) return null;
+  if (!ready) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, PanResponder } from 'react-native';
 import Svg, { Defs, RadialGradient, LinearGradient, Stop, Rect } from 'react-native-svg';
+import { useMotion } from '../../lib/useMotion';
 
 // A living neo-gradient mesh. Layered radial "blobs" over a dark base, each on
 // its own parallax depth. Motion comes from three sources, composed natively:
@@ -38,6 +39,12 @@ export default function LivingGradient({ style, children, pointerEvents }) {
   const prefix = useRef(`lg${_uid++}`).current;
   const size = useRef({ w: 1, h: 1 }).current;
 
+  // Accessibility: when motion is reduced, the mesh renders as a still image —
+  // no drift loop, no breathing pulse, no accelerometer tilt, no touch parallax.
+  const { reduce } = useMotion();
+  const reduceRef = useRef(reduce);
+  reduceRef.current = reduce;
+
   const drift = useRef(new Animated.Value(0)).current;
   const tiltX = useRef(new Animated.Value(0)).current;
   const tiltY = useRef(new Animated.Value(0)).current;
@@ -48,15 +55,17 @@ export default function LivingGradient({ style, children, pointerEvents }) {
 
   // Continuous seamless drift loop.
   useEffect(() => {
+    if (reduce) { drift.setValue(0); return; }
     const loop = Animated.loop(
       Animated.timing(drift, { toValue: 1, duration: 14000, useNativeDriver: true }),
     );
     loop.start();
     return () => loop.stop();
-  }, []);
+  }, [reduce]);
 
   // Slow breathing pulse on the light layers — alive even when idle.
   useEffect(() => {
+    if (reduce) { breathe.setValue(0); return; }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(breathe, { toValue: 1, duration: 4200, useNativeDriver: true }),
@@ -65,11 +74,12 @@ export default function LivingGradient({ style, children, pointerEvents }) {
     );
     loop.start();
     return () => loop.stop();
-  }, []);
+  }, [reduce]);
   const breatheScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.09] });
 
   // Device tilt via accelerometer, low-pass filtered for smoothness.
   useEffect(() => {
+    if (reduce) return;
     let sub;
     let sx = 0, sy = 0;
     let cancelled = false;
@@ -93,14 +103,15 @@ export default function LivingGradient({ style, children, pointerEvents }) {
       cancelled = true;
       sub?.remove?.();
     };
-  }, []);
+  }, [reduce]);
 
   // Touch / drag parallax. Only claims the gesture on actual movement so taps
   // pass through to children (buttons).
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) + Math.abs(g.dy) > 6,
+      onMoveShouldSetPanResponder: (_e, g) =>
+        !reduceRef.current && Math.abs(g.dx) + Math.abs(g.dy) > 6,
       onPanResponderMove: (e) => {
         const { locationX, locationY } = e.nativeEvent;
         const nx = (locationX / size.w - 0.5) * 2;

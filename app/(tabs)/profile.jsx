@@ -1,46 +1,23 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
 import { useProfile, useProfileStats } from '../../lib/hooks/useProfile';
+import { useStore } from '../../lib/store';
 import { queryClient } from '../../lib/providers';
-import { colors, fonts, spacing, radius, shadows } from '../../lib/theme';
+import { FOCUS_AREAS, FOCUS_AREA_MAP } from '../../lib/constants/areas';
+import { colors, brand, fonts, spacing, radius, shadows } from '../../lib/theme';
 import { showToast } from '../../lib/toast';
+import GradientMesh from '../../components/ui/GradientMesh';
+import SettingsRow from '../../components/layout/SettingsRow';
 
-const SETTINGS = [
-  {
-    id: 'info',
-    route: '/personal-information',
-    icon: 'manage-accounts',
-    title: 'Personal Information',
-    subtitle: 'Change name, email, password',
-    color: colors.primary[500],
-  },
-  {
-    id: 'notifs',
-    route: '/notification-settings',
-    icon: 'notifications',
-    title: 'Notifications',
-    subtitle: 'Manage notification preferences',
-    color: colors.warning[400],
-  },
-  {
-    id: 'privacy',
-    route: '/privacy-security',
-    icon: 'lock',
-    title: 'Privacy & Security',
-    subtitle: 'Terms of service',
-    color: colors.success[400],
-  },
-  {
-    id: 'support',
-    route: '/contact-support',
-    icon: 'headset-mic',
-    title: 'Contact Support',
-    subtitle: 'Get help from our team',
-    color: colors.gray[600],
-  },
+const STAT_META = [
+  { key: 'tasks',  icon: 'check-circle',           color: colors.success[400], tint: colors.success[50] },
+  { key: 'streak', icon: 'local-fire-department',  color: colors.accent.sand600, tint: colors.accent.sand50 },
+  { key: 'habits', icon: 'repeat',                 color: colors.accent.powder600, tint: colors.accent.powder50 },
+  { key: 'days',   icon: 'calendar-today',         color: colors.primary[500], tint: colors.primary[50] },
 ];
 
 export default function ProfileScreen() {
@@ -49,98 +26,261 @@ export default function ProfileScreen() {
   const { data: profile } = useProfile();
   const { data: statsData } = useProfileStats();
 
-  const stats = [
-    { label: 'Tasks Done',  value: statsData?.completedTasks ?? 0 },
-    { label: 'Habits',      value: statsData?.habitCount ?? 0 },
-    { label: 'Streak',      value: `${statsData?.streakMax ?? 0}d` },
-    { label: 'Days Active', value: statsData?.daysActive ?? 1 },
-  ];
+  const focusAreas = useStore((s) => s.focusAreas);
+  const setFocusAreas = useStore((s) => s.setFocusAreas);
+  const reduceMotion = useStore((s) => s.reduceMotion);
+  const setReduceMotion = useStore((s) => s.setReduceMotion);
+
+  const [editingFocus, setEditingFocus] = useState(false);
+
+  const stats = {
+    tasks:  { value: statsData?.completedTasks ?? 0, label: 'Tasks done' },
+    streak: { value: `${statsData?.streakMax ?? 0}d`, label: 'Best streak' },
+    habits: { value: statsData?.habitCount ?? 0, label: 'Habits' },
+    days:   { value: statsData?.daysActive ?? 1, label: 'Days active' },
+  };
+
+  const toggleArea = (key) => {
+    const on = focusAreas.includes(key);
+    // Keep at least one focus area so the Home hub is never empty.
+    if (on && focusAreas.length === 1) return;
+    const next = on ? focusAreas.filter((k) => k !== key) : [...focusAreas, key];
+    setFocusAreas(next);
+  };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Log Out',
-          style: 'destructive',
-          onPress: async () => {
-            queryClient.clear();
-            await signOut();
-            showToast.logoutConfirmed();
-            router.replace('/(auth)/login');
-          },
+    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: async () => {
+          queryClient.clear();
+          await signOut();
+          showToast.logoutConfirmed();
+          router.replace('/(auth)/login');
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.topBar}>
         <Text style={styles.screenTitle}>Profile</Text>
-        <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <MaterialIcons name="share" size={22} color={colors.gray[600]} />
+        <TouchableOpacity
+          style={styles.editIconBtn}
+          hitSlop={8}
+          onPress={() => router.push('/edit-profile')}
+          accessibilityRole="button"
+          accessibilityLabel="Edit profile"
+        >
+          <MaterialIcons name="edit" size={18} color={brand.ink} />
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={[styles.profileCard, shadows.card]}>
-          <TouchableOpacity
-            style={styles.editBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            onPress={() => router.push('/edit-profile')}
-          >
-            <MaterialIcons name="edit" size={16} color={colors.gray[600]} />
-          </TouchableOpacity>
+        {/* ── Identity hero ─────────────────────────────── */}
+        <GradientMesh variant="hero" radius={radius['2xl']} style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View style={styles.avatarWrap}>
+              <View style={styles.avatarRing}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{profile?.initials ?? '?'}</Text>
+                </View>
+              </View>
+              {(statsData?.streakMax ?? 0) > 0 && (
+                <View style={styles.streakBadge}>
+                  <MaterialIcons name="local-fire-department" size={12} color={brand.canvas} />
+                  <Text style={styles.streakBadgeText}>{statsData.streakMax}</Text>
+                </View>
+              )}
+            </View>
 
-          <View style={styles.avatarWrapper}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{profile?.initials ?? '?'}</Text>
+            <View style={styles.heroText}>
+              <Text style={styles.heroName} numberOfLines={1}>{profile?.fullName ?? 'User'}</Text>
+              <Text style={styles.heroEmail} numberOfLines={1}>{profile?.email ?? ''}</Text>
             </View>
           </View>
 
-          <Text style={styles.name}>{profile?.fullName ?? 'User'}</Text>
-          <Text style={styles.email}>{profile?.email ?? ''}</Text>
+          <TouchableOpacity
+            style={styles.editProfileBtn}
+            activeOpacity={0.9}
+            onPress={() => router.push('/edit-profile')}
+          >
+            <MaterialIcons name="person-outline" size={16} color={brand.ink} />
+            <Text style={styles.editProfileText}>Edit profile</Text>
+          </TouchableOpacity>
+        </GradientMesh>
 
-          <View style={styles.statsRow}>
-            {stats.map((s) => (
-              <View key={s.label} style={styles.statItem}>
+        {/* ── Stat tiles ───────────────────────────────── */}
+        <View style={styles.statGrid}>
+          {STAT_META.map((m) => {
+            const s = stats[m.key];
+            return (
+              <View key={m.key} style={[styles.statCard, shadows.card]}>
+                <View style={[styles.statIcon, { backgroundColor: m.tint }]}>
+                  <MaterialIcons name={m.icon} size={18} color={m.color} />
+                </View>
                 <Text style={styles.statValue}>{s.value}</Text>
                 <Text style={styles.statLabel}>{s.label}</Text>
               </View>
-            ))}
+            );
+          })}
+        </View>
+
+        {/* ── Your focus ───────────────────────────────── */}
+        <View style={styles.block}>
+          <View style={styles.blockHeader}>
+            <View>
+              <Text style={styles.blockTitle}>Your focus</Text>
+              <Text style={styles.blockSub}>What shows up on your Home hub</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.editLinkBtn}
+              onPress={() => setEditingFocus((v) => !v)}
+              hitSlop={8}
+            >
+              <Text style={styles.editLink}>{editingFocus ? 'Done' : 'Edit'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={[styles.focusCard, shadows.card]}>
+            {editingFocus ? (
+              <View style={styles.focusGrid}>
+                {FOCUS_AREAS.map((a) => {
+                  const on = focusAreas.includes(a.key);
+                  return (
+                    <TouchableOpacity
+                      key={a.key}
+                      style={[styles.focusOption, on && styles.focusOptionOn]}
+                      activeOpacity={0.85}
+                      onPress={() => toggleArea(a.key)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: on }}
+                      accessibilityLabel={a.label}
+                    >
+                      <View style={[styles.focusOptIcon, on && styles.focusOptIconOn]}>
+                        <MaterialIcons name={a.icon} size={18} color={on ? brand.canvas : brand.ink} />
+                      </View>
+                      <View style={styles.focusOptText}>
+                        <Text style={styles.focusOptLabel}>{a.label}</Text>
+                        <Text style={styles.focusOptBlurb} numberOfLines={1}>{a.blurb}</Text>
+                      </View>
+                      <MaterialIcons
+                        name={on ? 'check-circle' : 'radio-button-unchecked'}
+                        size={20}
+                        color={on ? brand.sand : colors.gray[200]}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.chipWrap}>
+                {focusAreas.map((key) => {
+                  const a = FOCUS_AREA_MAP[key];
+                  if (!a) return null;
+                  return (
+                    <View key={key} style={styles.focusChip}>
+                      <MaterialIcons name={a.icon} size={14} color={brand.ink} />
+                      <Text style={styles.focusChipText}>{a.label}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </View>
 
-        <View style={styles.settingsSection}>
-          <Text style={styles.settingsTitle}>Settings</Text>
-          <View style={[styles.settingsList, shadows.card]}>
-            {SETTINGS.map((item, idx) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[styles.settingsRow, idx < SETTINGS.length - 1 && styles.settingsBorder]}
-                activeOpacity={0.7}
-                onPress={() => router.push(item.route)}
-              >
-                <View style={[styles.iconCircle, { backgroundColor: item.color + '18' }]}>
-                  <MaterialIcons name={item.icon} size={18} color={item.color} />
-                </View>
-                <View style={styles.settingsText}>
-                  <Text style={styles.settingsRowTitle}>{item.title}</Text>
-                  <Text style={styles.settingsRowSub}>{item.subtitle}</Text>
-                </View>
-                <MaterialIcons name="chevron-right" size={18} color={colors.gray[400]} />
-              </TouchableOpacity>
-            ))}
+        {/* ── Preferences ──────────────────────────────── */}
+        <View style={styles.block}>
+          <Text style={styles.blockTitle}>Preferences</Text>
+          <View style={[styles.groupCard, shadows.card]}>
+            <SettingsRow
+              icon="motion-photos-off"
+              iconColor={colors.accent.powder600}
+              iconBg={colors.accent.powder50}
+              title="Reduce motion"
+              subtitle="Calmer transitions & still backgrounds"
+              showChevron={false}
+              rightElement={
+                <Switch
+                  value={reduceMotion}
+                  onValueChange={setReduceMotion}
+                  trackColor={{ false: colors.gray[200], true: brand.ink }}
+                  thumbColor="#FFFFFF"
+                  ios_backgroundColor={colors.gray[200]}
+                />
+              }
+            />
+            <View style={styles.divider} />
+            <SettingsRow
+              icon="notifications"
+              iconColor={colors.warning[400]}
+              iconBg={colors.warning[50]}
+              title="Notifications"
+              subtitle="Reminders & nudges"
+              onPress={() => router.push('/notification-settings')}
+            />
           </View>
         </View>
 
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
+        {/* ── Account ──────────────────────────────────── */}
+        <View style={styles.block}>
+          <Text style={styles.blockTitle}>Account</Text>
+          <View style={[styles.groupCard, shadows.card]}>
+            <SettingsRow
+              icon="manage-accounts"
+              iconColor={colors.primary[500]}
+              iconBg={colors.primary[50]}
+              title="Personal information"
+              subtitle="Name, email, password"
+              onPress={() => router.push('/personal-information')}
+            />
+            <View style={styles.divider} />
+            <SettingsRow
+              icon="lock"
+              iconColor={colors.success[400]}
+              iconBg={colors.success[50]}
+              title="Privacy & security"
+              subtitle="Data & terms of service"
+              onPress={() => router.push('/privacy-security')}
+            />
+          </View>
+        </View>
+
+        {/* ── Support ──────────────────────────────────── */}
+        <View style={styles.block}>
+          <Text style={styles.blockTitle}>Support</Text>
+          <View style={[styles.groupCard, shadows.card]}>
+            <SettingsRow
+              icon="headset-mic"
+              iconColor={colors.gray[600]}
+              iconBg={colors.gray[50]}
+              title="Contact support"
+              subtitle="Get help from our team"
+              onPress={() => router.push('/contact-support')}
+            />
+            <View style={styles.divider} />
+            <SettingsRow
+              icon="bug-report"
+              iconColor={colors.gray[600]}
+              iconBg={colors.gray[50]}
+              title="Report a bug"
+              subtitle="Tell us what went wrong"
+              onPress={() => router.push('/bug-report')}
+            />
+          </View>
+        </View>
+
+        {/* ── Sign out ─────────────────────────────────── */}
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
           <MaterialIcons name="logout" size={18} color={colors.danger[400]} />
-          <Text style={styles.logoutText}>Log Out</Text>
+          <Text style={styles.logoutText}>Log out</Text>
         </TouchableOpacity>
+
+        <Text style={styles.version}>TaskFlow · v1.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -154,146 +294,290 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.screenH,
     height: 56,
-    backgroundColor: colors.bg.elevated,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
   },
   screenTitle: {
-    fontSize: 20,
-    fontFamily: fonts.bold,
-    color: colors.gray[900],
-    lineHeight: 28,
-  },
-  scroll: { padding: spacing.screenH, paddingBottom: 100, gap: 20 },
-  profileCard: {
-    backgroundColor: colors.bg.card,
-    borderRadius: radius.lg,
-    padding: 20,
-    alignItems: 'center',
-    position: 'relative',
-  },
-  editBtn: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    padding: 6,
-  },
-  avatarWrapper: {
-    marginBottom: 12,
-  },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.primary[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: colors.primary[400],
-  },
-  avatarText: {
     fontSize: 24,
     fontFamily: fonts.bold,
-    color: colors.primary[800],
-    lineHeight: 32,
+    color: brand.ink,
+    lineHeight: 30,
+    letterSpacing: -0.4,
   },
-  name: {
-    fontSize: 20,
-    fontFamily: fonts.bold,
-    color: colors.gray[900],
-    lineHeight: 28,
+  editIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  email: {
-    fontSize: 13,
-    fontFamily: fonts.regular,
-    color: colors.gray[400],
-    lineHeight: 18,
-    marginBottom: 16,
+  scroll: {
+    paddingHorizontal: spacing.screenH,
+    paddingBottom: 140,
+    gap: spacing.sectionGap,
+    paddingTop: 6,
   },
-  statsRow: {
+
+  // Hero
+  hero: {
+    padding: 20,
+  },
+  heroTop: {
     flexDirection: 'row',
-    gap: 0,
-    width: '100%',
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
-    paddingTop: 16,
+    alignItems: 'center',
+    gap: 14,
   },
-  statItem: {
-    flex: 1,
+  avatarWrap: {
+    position: 'relative',
+  },
+  avatarRing: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(175,210,250,0.55)',
+  },
+  avatar: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: brand.canvas,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 22,
+    fontFamily: fonts.bold,
+    color: brand.ink,
+  },
+  streakBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -6,
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    borderRightWidth: 1,
-    borderRightColor: colors.gray[100],
+    backgroundColor: brand.sand,
+    borderRadius: radius.pill,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderWidth: 2,
+    borderColor: '#182350',
+  },
+  streakBadgeText: {
+    fontSize: 11,
+    fontFamily: fonts.bold,
+    color: brand.canvas,
+    lineHeight: 14,
+  },
+  heroText: {
+    flex: 1,
+  },
+  heroName: {
+    fontSize: 21,
+    fontFamily: fonts.bold,
+    color: brand.canvas,
+    lineHeight: 27,
+    letterSpacing: -0.3,
+  },
+  heroEmail: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: '#C6CDE6',
+    lineHeight: 18,
+    marginTop: 3,
+  },
+  editProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    alignSelf: 'flex-start',
+    marginTop: 18,
+    backgroundColor: brand.canvas,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+  },
+  editProfileText: {
+    fontSize: 13,
+    fontFamily: fonts.semibold,
+    color: brand.ink,
+  },
+
+  // Stats
+  statGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  statCard: {
+    width: '47%',
+    flexGrow: 1,
+    backgroundColor: colors.bg.card,
+    borderRadius: radius.lg,
+    padding: 16,
+    gap: 8,
+  },
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 24,
     fontFamily: fonts.bold,
-    color: colors.primary[500],
+    color: brand.ink,
     lineHeight: 28,
+    letterSpacing: -0.4,
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 12,
+    fontFamily: fonts.medium,
+    color: colors.gray[600],
+    lineHeight: 16,
+  },
+
+  // Blocks
+  block: { gap: 10 },
+  blockHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  blockTitle: {
+    fontSize: 17,
+    fontFamily: fonts.bold,
+    color: brand.ink,
+    lineHeight: 24,
+    paddingLeft: 2,
+  },
+  blockSub: {
+    fontSize: 12,
     fontFamily: fonts.regular,
     color: colors.gray[400],
     lineHeight: 16,
-    textAlign: 'center',
+    paddingLeft: 2,
+    marginTop: 1,
   },
-  settingsSection: { gap: 8 },
-  settingsTitle: {
-    fontSize: 17,
-    fontFamily: fonts.bold,
-    color: colors.gray[900],
-    lineHeight: 24,
-    paddingLeft: 4,
+  editLinkBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary[50],
   },
-  settingsList: {
+  editLink: {
+    fontSize: 13,
+    fontFamily: fonts.semibold,
+    color: colors.primary[500],
+  },
+
+  // Focus card
+  focusCard: {
+    backgroundColor: colors.bg.card,
+    borderRadius: radius.lg,
+    padding: 14,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  focusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.bg.subtle,
+    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  focusChipText: {
+    fontSize: 13,
+    fontFamily: fonts.semibold,
+    color: brand.ink,
+  },
+  focusGrid: {
+    gap: 8,
+  },
+  focusOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 10,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.gray[100],
+    backgroundColor: colors.bg.card,
+  },
+  focusOptionOn: {
+    borderColor: brand.ink,
+    backgroundColor: colors.gray[25],
+  },
+  focusOptIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.bg.subtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  focusOptIconOn: {
+    backgroundColor: brand.ink,
+  },
+  focusOptText: { flex: 1 },
+  focusOptLabel: {
+    fontSize: 15,
+    fontFamily: fonts.semibold,
+    color: brand.ink,
+    lineHeight: 20,
+  },
+  focusOptBlurb: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: colors.gray[400],
+    lineHeight: 16,
+  },
+
+  // Grouped settings
+  groupCard: {
     backgroundColor: colors.bg.card,
     borderRadius: radius.lg,
     overflow: 'hidden',
   },
-  settingsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-    minHeight: 52,
+  divider: {
+    height: 1,
+    backgroundColor: colors.gray[100],
+    marginLeft: 60,
   },
-  settingsBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
-  },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  settingsText: { flex: 1, gap: 2 },
-  settingsRowTitle: {
-    fontSize: 15,
-    fontFamily: fonts.semibold,
-    color: colors.gray[900],
-    lineHeight: 22,
-  },
-  settingsRowSub: {
-    fontSize: 12,
-    fontFamily: fonts.regular,
-    color: colors.gray[400],
-    lineHeight: 17,
-  },
+
+  // Logout
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 14,
+    paddingVertical: 15,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.danger[400] + '40',
+    backgroundColor: colors.danger[50],
   },
   logoutText: {
     fontSize: 15,
     fontFamily: fonts.semibold,
     color: colors.danger[400],
     lineHeight: 22,
+  },
+  version: {
+    textAlign: 'center',
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: colors.gray[400],
+    marginTop: -8,
   },
 });

@@ -14,6 +14,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { TapGestureHandler, State } from 'react-native-gesture-handler';
 import Svg, { Circle } from 'react-native-svg';
 import { useStore } from '../../lib/store';
+import { useMotion } from '../../lib/useMotion';
 import { useTasks, useToggleTask, useDeleteTask, getDailyStats, getOverdueCount } from '../../lib/hooks/useTasks';
 import { useHabits, useToggleHabit } from '../../lib/hooks/useHabits';
 import { useNotes } from '../../lib/hooks/useNotes';
@@ -30,11 +31,13 @@ import WeekStrip from '../../components/ui/WeekStrip';
 import MonthCalendarPicker from '../../components/ui/MonthCalendarPicker';
 import NoteCard from '../../components/ui/NoteCard';
 
+// `area` ties a chip to a focus area so the row reflects what the user picked.
+// `today` has no area — it's always shown.
 const CHIPS = [
-  { key: 'today',  label: 'Today',  icon: 'wb-sunny',     route: null },
-  { key: 'tasks',  label: 'Tasks',  icon: 'checklist',    route: '/(tabs)/tasks' },
-  { key: 'habits', label: 'Habits', icon: 'local-fire-department', route: '/see-all-habits' },
-  { key: 'meals',  label: 'Meals',  icon: 'restaurant',   route: '/nutrition' },
+  { key: 'today',  label: 'Today',  icon: 'wb-sunny',              route: null,              area: null },
+  { key: 'tasks',  label: 'Tasks',  icon: 'checklist',             route: '/(tabs)/tasks',   area: 'tasks' },
+  { key: 'habits', label: 'Habits', icon: 'local-fire-department', route: '/see-all-habits', area: 'habits' },
+  { key: 'meals',  label: 'Meals',  icon: 'restaurant',            route: '/nutrition',      area: 'nutrition' },
 ];
 
 function greetingFor(date = new Date()) {
@@ -67,6 +70,8 @@ function heroState(remainingTasks, overallPct) {
 export default function HomeScreen() {
   const router = useRouter();
   const { selectedDate, setSelectedDate } = useStore();
+  const focusAreas = useStore((s) => s.focusAreas);
+  const { animate } = useMotion();
   const { data: tasks = [], refetch: refetchTasks } = useTasks();
   const { data: habits = [], refetch: refetchHabits } = useHabits();
   const { data: notes = [], refetch: refetchNotes } = useNotes();
@@ -117,26 +122,154 @@ export default function HomeScreen() {
   const hero = heroState(remainingTasks, stats.overallPct);
   const firstName = (profile?.fullName || '').split(' ')[0] || 'there';
 
-  // Hero entrance + ring fill choreography.
+  // Which focus areas the user picked → drives what shows on the Home hub.
+  const wants = (area) => focusAreas.includes(area);
+  const visibleChips = CHIPS.filter((c) => !c.area || wants(c.area));
+
+  // Hero entrance + ring fill choreography (skipped when motion is reduced).
   const heroIn = useRef(new Animated.Value(0)).current;
   const ringAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
+    if (!animate) { heroIn.setValue(1); return; }
     Animated.timing(heroIn, { toValue: 1, duration: 460, useNativeDriver: true, easing: easeOut }).start();
-  }, []);
+  }, [animate]);
   useEffect(() => {
+    const target = Math.min(1, Math.max(0, stats.overallPct / 100));
+    if (!animate) { ringAnim.setValue(target); return; }
     Animated.timing(ringAnim, {
-      toValue: Math.min(1, Math.max(0, stats.overallPct / 100)),
+      toValue: target,
       duration: 850,
       delay: 150,
       useNativeDriver: false,
       easing: easeOut,
     }).start();
-  }, [stats.overallPct]);
+  }, [stats.overallPct, animate]);
   const ringDashoffset = ringAnim.interpolate({ inputRange: [0, 1], outputRange: [RING_CIRC, 0] });
   const heroStyle = {
     opacity: heroIn,
     transform: [{ translateY: heroIn.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
   };
+
+  // ── Home hub sections (rendered in focus-area order) ──────────────
+  const renderHabits = () => (
+    habits.length > 0 ? (
+      <View key="habits" style={styles.section}>
+        <SectionHeader
+          title="Habits"
+          count={habits.length}
+          rightElement={
+            <View style={styles.headerActions}>
+              <TouchableOpacity onPress={() => router.push('/see-all-habits')} hitSlop={8}>
+                <Text style={styles.seeAllLink}>See all</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/habit-new')} hitSlop={8}>
+                <MaterialIcons name="add" size={20} color={colors.primary[500]} />
+              </TouchableOpacity>
+            </View>
+          }
+        />
+        <View style={styles.habitList}>
+          {habits.slice(0, 4).map((h) => (
+            <HabitCard key={h.id} habit={h} onPress={goToHabit} onToggle={onToggleHabit} />
+          ))}
+        </View>
+      </View>
+    ) : null
+  );
+
+  const renderTasks = () => (
+    <View key="tasks" style={styles.section}>
+      <SectionHeader
+        title="Today's tasks"
+        count={todayTasks.length}
+        rightElement={
+          <TouchableOpacity onPress={() => router.push('/see-all-tasks')} hitSlop={8}>
+            <Text style={styles.seeAllLink}>See all</Text>
+          </TouchableOpacity>
+        }
+      />
+
+      {inProgress.length > 0 && (
+        <View style={styles.taskGroup}>
+          <Text style={styles.groupLabel}>IN PROGRESS</Text>
+          <View style={styles.taskList}>
+            {inProgress.map((t) => (
+              <TaskItem key={t.id} task={t} onToggle={onToggleTask} onDelete={onDeleteTask} onPress={goToTask} />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {pending.length > 0 && (
+        <View style={styles.taskGroup}>
+          <Text style={styles.groupLabel}>PENDING</Text>
+          <View style={styles.taskList}>
+            {pending.map((t) => (
+              <TaskItem key={t.id} task={t} onToggle={onToggleTask} onDelete={onDeleteTask} onPress={goToTask} />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {completed.length > 0 && (
+        <View style={styles.taskGroup}>
+          <TouchableOpacity style={styles.completedToggle} onPress={() => setShowCompleted(!showCompleted)} activeOpacity={0.7}>
+            <Text style={styles.completedToggleText}>
+              {showCompleted ? 'Hide' : `Show ${completed.length} completed`}
+            </Text>
+            <MaterialIcons name={showCompleted ? 'expand-less' : 'expand-more'} size={18} color={colors.gray[400]} />
+          </TouchableOpacity>
+          {showCompleted && (
+            <View style={styles.taskList}>
+              {completed.map((t) => (
+                <TaskItem key={t.id} task={t} onToggle={onToggleTask} onDelete={onDeleteTask} onPress={goToTask} />
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {todayTasks.length === 0 && (
+        <View style={styles.emptyState}>
+          <MaterialIcons name="wb-twilight" size={44} color={colors.gray[400]} />
+          <Text style={styles.emptyTitle}>Nothing due today</Text>
+          <Text style={styles.emptySubtitle}>Capture a task above to get going.</Text>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderNotes = () => (
+    (wants('notes') && notes.length > 0) ? (
+      <View key="notes" style={[styles.section, styles.lastSection]}>
+        <SectionHeader
+          title="Notes"
+          rightElement={
+            <View style={styles.headerActions}>
+              <TouchableOpacity onPress={() => router.push('/see-all-notes')} hitSlop={8}>
+                <Text style={styles.seeAllLink}>See all</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/note/new')} hitSlop={8}>
+                <MaterialIcons name="add" size={20} color={colors.primary[500]} />
+              </TouchableOpacity>
+            </View>
+          }
+        />
+        <View style={styles.notesGrid}>
+          {notes.map((note) => (
+            <NoteCard key={note.id} note={note} onPress={() => router.push(`/note/${note.id}`)} />
+          ))}
+        </View>
+      </View>
+    ) : null
+  );
+
+  const coreRenderers = { habits: renderHabits, tasks: renderTasks };
+  // Habits & Tasks appear only if picked, ordered by the user's focus priority.
+  const homeSections = [
+    ...focusAreas.filter((a) => coreRenderers[a]).map((a) => coreRenderers[a]()),
+    renderNotes(),
+  ];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -221,7 +354,7 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chipRow}
         >
-          {CHIPS.map((c) => {
+          {visibleChips.map((c) => {
             const active = c.key === 'today';
             return (
               <TouchableOpacity
@@ -258,120 +391,8 @@ export default function HomeScreen() {
           </TapGestureHandler>
         </View>
 
-        {/* Habits */}
-        {habits.length > 0 && (
-          <View style={styles.section}>
-            <SectionHeader
-              title="Habits"
-              count={habits.length}
-              rightElement={
-                <View style={styles.headerActions}>
-                  <TouchableOpacity onPress={() => router.push('/see-all-habits')} hitSlop={8}>
-                    <Text style={styles.seeAllLink}>See all</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => router.push('/habit-new')} hitSlop={8}>
-                    <MaterialIcons name="add" size={20} color={colors.primary[500]} />
-                  </TouchableOpacity>
-                </View>
-              }
-            />
-            <View style={styles.habitList}>
-              {habits.slice(0, 4).map((h) => (
-                <HabitCard
-                  key={h.id}
-                  habit={h}
-                  onPress={goToHabit}
-                  onToggle={onToggleHabit}
-                />
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Today's Tasks */}
-        <View style={styles.section}>
-          <SectionHeader
-            title="Today's tasks"
-            count={todayTasks.length}
-            rightElement={
-              <TouchableOpacity onPress={() => router.push('/see-all-tasks')} hitSlop={8}>
-                <Text style={styles.seeAllLink}>See all</Text>
-              </TouchableOpacity>
-            }
-          />
-
-          {inProgress.length > 0 && (
-            <View style={styles.taskGroup}>
-              <Text style={styles.groupLabel}>IN PROGRESS</Text>
-              <View style={styles.taskList}>
-                {inProgress.map((t) => (
-                  <TaskItem key={t.id} task={t} onToggle={onToggleTask} onDelete={onDeleteTask} onPress={goToTask} />
-                ))}
-              </View>
-            </View>
-          )}
-
-          {pending.length > 0 && (
-            <View style={styles.taskGroup}>
-              <Text style={styles.groupLabel}>PENDING</Text>
-              <View style={styles.taskList}>
-                {pending.map((t) => (
-                  <TaskItem key={t.id} task={t} onToggle={onToggleTask} onDelete={onDeleteTask} onPress={goToTask} />
-                ))}
-              </View>
-            </View>
-          )}
-
-          {completed.length > 0 && (
-            <View style={styles.taskGroup}>
-              <TouchableOpacity style={styles.completedToggle} onPress={() => setShowCompleted(!showCompleted)} activeOpacity={0.7}>
-                <Text style={styles.completedToggleText}>
-                  {showCompleted ? 'Hide' : `Show ${completed.length} completed`}
-                </Text>
-                <MaterialIcons name={showCompleted ? 'expand-less' : 'expand-more'} size={18} color={colors.gray[400]} />
-              </TouchableOpacity>
-              {showCompleted && (
-                <View style={styles.taskList}>
-                  {completed.map((t) => (
-                    <TaskItem key={t.id} task={t} onToggle={onToggleTask} onDelete={onDeleteTask} onPress={goToTask} />
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-
-          {todayTasks.length === 0 && (
-            <View style={styles.emptyState}>
-              <MaterialIcons name="wb-twilight" size={44} color={colors.gray[400]} />
-              <Text style={styles.emptyTitle}>Nothing due today</Text>
-              <Text style={styles.emptySubtitle}>Capture a task above to get going.</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Notes */}
-        {notes.length > 0 && (
-          <View style={[styles.section, styles.lastSection]}>
-            <SectionHeader
-              title="Notes"
-              rightElement={
-                <View style={styles.headerActions}>
-                  <TouchableOpacity onPress={() => router.push('/see-all-notes')} hitSlop={8}>
-                    <Text style={styles.seeAllLink}>See all</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => router.push('/note/new')} hitSlop={8}>
-                    <MaterialIcons name="add" size={20} color={colors.primary[500]} />
-                  </TouchableOpacity>
-                </View>
-              }
-            />
-            <View style={styles.notesGrid}>
-              {notes.map((note) => (
-                <NoteCard key={note.id} note={note} onPress={() => router.push(`/note/${note.id}`)} />
-              ))}
-            </View>
-          </View>
-        )}
+        {/* Focus-personalized hub — sections appear and order by the user's picks */}
+        {homeSections}
       </ScrollView>
     </SafeAreaView>
   );

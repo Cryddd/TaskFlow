@@ -10,18 +10,13 @@ import GradientMesh from '../../components/ui/GradientMesh';
 import { useAuth } from '../../lib/AuthContext';
 import { useProfile, useUpdateProfile } from '../../lib/hooks/useProfile';
 import { useStore } from '../../lib/store';
+import { useMotion } from '../../lib/useMotion';
+import { FOCUS_AREAS, DEFAULT_FOCUS_AREAS } from '../../lib/constants/areas';
 import { colors, brand, fonts, radius, spacing } from '../../lib/theme';
 
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
-const AREAS = [
-  { key: 'tasks',     icon: 'checklist',              label: 'Tasks' },
-  { key: 'habits',    icon: 'local-fire-department',  label: 'Habits' },
-  { key: 'focus',     icon: 'timer',                  label: 'Focus' },
-  { key: 'nutrition', icon: 'restaurant',             label: 'Nutrition' },
-  { key: 'goals',     icon: 'flag',                   label: 'Goals' },
-  { key: 'notes',     icon: 'sticky-note-2',          label: 'Notes' },
-];
+const AREAS = FOCUS_AREAS;
 
 const STEPS = 3;
 
@@ -32,10 +27,12 @@ export default function Setup() {
   const updateProfile = useUpdateProfile();
   const setFocusAreas = useStore((s) => s.setFocusAreas);
   const setOnboarded = useStore((s) => s.setOnboarded);
+  const savedAreas = useStore((s) => s.focusAreas);
+  const { animate } = useMotion();
 
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
-  const [selected, setSelected] = useState(['tasks', 'habits', 'focus', 'nutrition']);
+  const [selected, setSelected] = useState(savedAreas ?? DEFAULT_FOCUS_AREAS);
 
   useEffect(() => {
     if (profile?.fullName && !name) setName(profile.fullName);
@@ -43,6 +40,7 @@ export default function Setup() {
 
   const anim = useRef(new Animated.Value(1)).current;
   const go = (next) => {
+    if (!animate) { setStep(next); anim.setValue(1); return; }
     Animated.timing(anim, { toValue: 0, duration: 130, useNativeDriver: true }).start(() => {
       setStep(next);
       anim.setValue(0);
