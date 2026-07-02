@@ -6,6 +6,7 @@ import Toast from 'react-native-toast-message';
 import { toastConfig } from '../lib/toastConfig';
 import { AppProviders } from '../lib/providers';
 import { useStore } from '../lib/store';
+import AppLockGate from '../components/AppLockGate';
 import {
   useFonts,
   Inter_400Regular,
@@ -48,6 +49,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppProviders>
       <StatusBar style="dark" />
+      <AppLockGate>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
@@ -71,6 +73,7 @@ export default function RootLayout() {
         <Stack.Screen name="contact-support" options={{ headerShown: false }} />
         <Stack.Screen name="bug-report" options={{ headerShown: false }} />
       </Stack>
+      </AppLockGate>
       <Toast config={toastConfig} />
       </AppProviders>
     </GestureHandlerRootView>

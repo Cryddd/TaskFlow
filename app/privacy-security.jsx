@@ -1,8 +1,11 @@
-import { View, Text, ScrollView, Switch, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, ScrollView, Switch, StyleSheet, Alert } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSettings, useUpdatePrivacySettings } from '../lib/hooks/useProfile';
-import { colors, fonts, spacing, radius, shadows } from '../lib/theme';
+import { useStore } from '../lib/store';
+import { colors, brand, fonts, spacing, radius, shadows } from '../lib/theme';
 import ScreenHeader from '../components/layout/ScreenHeader';
 import SettingsRow from '../components/layout/SettingsRow';
 import { SettingsListSkeleton } from '../components/ui/SkeletonLoader';
@@ -19,6 +22,46 @@ export default function PrivacySecurityScreen() {
   const { data: settings, isLoading } = useSettings();
   const updateMut = useUpdatePrivacySettings();
   const privacySettings = settings?.privacySettings ?? DEFAULTS;
+
+  // App Lock is a device-level setting → stored locally so it's available at
+  // cold start without a network round-trip (see AppLockGate).
+  const appLock = useStore((s) => s.appLock);
+  const setAppLock = useStore((s) => s.setAppLock);
+  const [bioLabel, setBioLabel] = useState('Face ID / fingerprint');
+  const [bioAvailable, setBioAvailable] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const hasHw = await LocalAuthentication.hasHardwareAsync();
+        const enrolled = await LocalAuthentication.isEnrolledAsync();
+        setBioAvailable(hasHw && enrolled);
+        const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+        if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) setBioLabel('Face ID');
+        else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) setBioLabel('fingerprint');
+      } catch {
+        setBioAvailable(false);
+      }
+    })();
+  }, []);
+
+  const onToggleLock = async (v) => {
+    if (!v) { setAppLock(false); return; }
+    const hasHw = await LocalAuthentication.hasHardwareAsync();
+    const enrolled = await LocalAuthentication.isEnrolledAsync();
+    if (!hasHw || !enrolled) {
+      Alert.alert(
+        'Set up device security',
+        'Add a fingerprint, Face ID, or device passcode in your phone settings first.',
+      );
+      return;
+    }
+    const res = await LocalAuthentication.authenticateAsync({
+      promptMessage: 'Confirm to enable App Lock',
+      fallbackLabel: 'Use passcode',
+    });
+    if (res.success) setAppLock(true);
+  };
 
   const openUrl = (url) => WebBrowser.openBrowserAsync(url);
 
@@ -38,14 +81,15 @@ export default function PrivacySecurityScreen() {
               iconBg={colors.primary[50]}
               iconColor={colors.primary[500]}
               title="App Lock"
-              subtitle="Require Face ID / fingerprint to open"
+              subtitle={bioAvailable ? `Require ${bioLabel} to open` : 'Set up device security to enable'}
               showChevron={false}
               rightElement={
                 <Switch
-                  value={privacySettings.appLock}
-                  onValueChange={(v) => updateMut.mutate({ ...privacySettings, appLock: v })}
-                  trackColor={{ false: colors.gray[200], true: colors.primary[400] }}
-                  thumbColor={privacySettings.appLock ? colors.primary[500] : colors.gray[0]}
+                  value={appLock}
+                  onValueChange={onToggleLock}
+                  trackColor={{ false: colors.gray[200], true: brand.ink }}
+                  thumbColor="#FFFFFF"
+                  ios_backgroundColor={colors.gray[200]}
                 />
               }
             />
