@@ -40,7 +40,8 @@
         {
           "faceIDPermission": "Use Face ID to unlock TaskFlow."
         }
-      ]
+      ],
+      "expo-notifications"
     ]
   }
 }

@@ -7,6 +7,7 @@ import { toastConfig } from '../lib/toastConfig';
 import { AppProviders } from '../lib/providers';
 import { useStore } from '../lib/store';
 import AppLockGate from '../components/AppLockGate';
+import NotificationSync from '../components/NotificationSync';
 import {
   useFonts,
   Inter_400Regular,
@@ -49,6 +50,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppProviders>
       <StatusBar style="dark" />
+      <NotificationSync />
       <AppLockGate>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
