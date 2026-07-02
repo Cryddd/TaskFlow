@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Animated, StyleSheet, Modal, Pressable } from 'react-native';
+import { View, Text, TouchableOpacity, Animated, StyleSheet, Modal, Pressable, Dimensions } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, fonts, radius, brand } from '../../lib/theme';
+
+const ICON = 44; // action icon-circle diameter
 
 const ACTIONS = [
   { key: 'task',  label: 'New Task',  icon: 'assignment-add', route: '/task-new'  },
@@ -13,10 +15,17 @@ const ACTIONS = [
 export default function FABMenu({ onNavigate, variant = 'floating' }) {
   const isTab = variant === 'tab';
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState(null); // measured FAB rect in window coords
+  const fabRef = useRef(null);
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const itemAnims = useRef(ACTIONS.map(() => new Animated.Value(0))).current;
 
   const openMenu = () => {
+    // Measure the FAB so the menu anchors precisely above it, regardless of
+    // where the dock lays the button out on different screen widths.
+    fabRef.current?.measureInWindow?.((x, y, w, h) => {
+      if (w) setAnchor({ x, y, w, h });
+    });
     setOpen(true);
     Animated.parallel([
       Animated.timing(backdropAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
@@ -47,6 +56,19 @@ export default function FABMenu({ onNavigate, variant = 'floating' }) {
     }
   };
 
+  // Anchor the menu so each row's icon circle is centered on the FAB's `+`,
+  // stacking upward with labels flowing to the left.
+  const { width: winW, height: winH } = Dimensions.get('window');
+  const anchoredStyle = anchor
+    ? {
+        position: 'absolute',
+        right: Math.max(12, winW - (anchor.x + anchor.w / 2 + ICON / 2)),
+        bottom: winH - anchor.y + 14,
+        alignItems: 'flex-end',
+        gap: 12,
+      }
+    : null;
+
   return (
     <>
       <Modal visible={open} transparent animationType="none" onRequestClose={closeMenu}>
@@ -58,7 +80,11 @@ export default function FABMenu({ onNavigate, variant = 'floating' }) {
         </Animated.View>
 
         <View
-          style={[styles.actionsContainer, isTab && styles.actionsContainerTab]}
+          style={[
+            styles.actionsContainer,
+            isTab && styles.actionsContainerTab,
+            anchoredStyle,
+          ]}
           pointerEvents="box-none"
         >
           {[...ACTIONS].reverse().map((action, idx) => {
@@ -79,11 +105,11 @@ export default function FABMenu({ onNavigate, variant = 'floating' }) {
                   onPress={() => handleAction(action)}
                   activeOpacity={0.8}
                 >
-                  <View style={styles.actionIconCircle}>
-                    <MaterialIcons name={action.icon} size={18} color={colors.primary[500]} />
-                  </View>
                   <View style={styles.actionLabelBubble}>
                     <Text style={styles.actionLabel}>{action.label}</Text>
+                  </View>
+                  <View style={styles.actionIconCircle}>
+                    <MaterialIcons name={action.icon} size={18} color={colors.primary[500]} />
                   </View>
                 </TouchableOpacity>
               </Animated.View>
@@ -93,6 +119,7 @@ export default function FABMenu({ onNavigate, variant = 'floating' }) {
       </Modal>
 
       <TouchableOpacity
+        ref={fabRef}
         style={[styles.fab, isTab && styles.tabFab]}
         onPress={open ? closeMenu : openMenu}
         activeOpacity={0.9}
